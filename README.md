@@ -84,6 +84,10 @@ Or use the UI's "Refresh Articles" button in the Settings page.
 5. Set up the cron job for automatic scraping:
    - Vercel will use the configuration in `vercel.json` to run the scraper every 6 hours
 
+## Deployment Notes
+
+This project is configured for deployment on Vercel. The application uses client-side URL handling to avoid issues with `useSearchParams()` in server components.
+
 ## License
 
 MIT

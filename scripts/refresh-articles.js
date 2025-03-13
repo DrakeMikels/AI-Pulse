@@ -1,85 +1,62 @@
-const { exec } = require('child_process');
-const path = require('path');
-const fs = require('fs');
+// This script is used to manually trigger the article scraping process
+// It calls the API endpoint that runs the scraper
 
-// Get the absolute path to the scraper script
-const scraperPath = path.join(__dirname, 'scraper.py');
+const https = require('https');
+const http = require('http');
 
-console.log('Executing scraper script:', scraperPath);
+// Get the base URL from environment or use localhost for development
+const baseUrl = process.env.VERCEL_URL 
+  ? `https://${process.env.VERCEL_URL}` 
+  : 'http://localhost:3000';
 
-// Function to generate sample articles when Python is not available
-function generateSampleArticles() {
-  const sources = ["Anthropic", "OpenAI", "Google AI", "DeepMind", "Meta AI"];
-  const topics = ["LLM", "Computer Vision", "AI Safety", "Multimodal AI", "Research"];
-  
-  return Array.from({ length: 10 }, (_, i) => ({
-    id: `sample-${i}-${Date.now()}`,
-    title: `Sample Article ${i + 1}`,
-    summary: `This is a sample article summary for article ${i + 1}.`,
-    content: `This is the content of sample article ${i + 1}. It contains information about AI advancements.`,
-    url: `https://example.com/article-${i + 1}`,
-    imageUrl: `https://placehold.co/600x400?text=AI+Article+${i + 1}`,
-    source: sources[i % sources.length],
-    topics: [topics[i % topics.length], topics[(i + 1) % topics.length]],
-    publishedAt: new Date().toISOString(),
-    createdAt: new Date().toISOString()
-  }));
+console.log(`Using base URL: ${baseUrl}`);
+
+// Function to make HTTP request
+function makeRequest(url) {
+  return new Promise((resolve, reject) => {
+    const client = url.startsWith('https') ? https : http;
+    
+    const req = client.get(url, (res) => {
+      let data = '';
+      
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+      
+      res.on('end', () => {
+        try {
+          const jsonData = JSON.parse(data);
+          resolve({ statusCode: res.statusCode, data: jsonData });
+        } catch (e) {
+          resolve({ statusCode: res.statusCode, data });
+        }
+      });
+    });
+    
+    req.on('error', (err) => {
+      reject(err);
+    });
+    
+    req.end();
+  });
 }
 
-// Function to create fallback data when Python is not available
-function createFallbackData() {
-  console.log('Python not available, using fallback mechanism');
-  
-  // Path to the data directory and articles.json file
-  const dataDir = path.join(process.cwd(), 'data');
-  const articlesPath = path.join(dataDir, 'articles.json');
-  
-  // Create data directory if it doesn't exist
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
+async function refreshArticles() {
+  try {
+    console.log('Refreshing articles...');
+    
+    // Call the API endpoint that runs the scraper
+    const response = await makeRequest(`${baseUrl}/api/cron/scrape`);
+    
+    if (response.statusCode === 200 && response.data.success) {
+      console.log('Success:', response.data.message);
+    } else {
+      console.error('Error:', response.data.error || 'Unknown error');
+    }
+  } catch (error) {
+    console.error('Failed to refresh articles:', error.message);
   }
-  
-  // Generate sample articles
-  const sampleArticles = generateSampleArticles();
-  
-  // Write sample articles to file
-  fs.writeFileSync(articlesPath, JSON.stringify(sampleArticles, null, 2));
-  
-  console.log('Generated sample articles as fallback');
-  return true;
 }
 
-// Execute the scraper script with quotes around the path to handle spaces
-exec(`python "${scraperPath}"`, (error, stdout, stderr) => {
-  if (error) {
-    console.error('Error running scraper:', error);
-    
-    // If Python is not available, use fallback mechanism
-    if (error.code === 127 || error.message.includes("not recognized") || error.message.includes("No such file")) {
-      if (createFallbackData()) {
-        console.log('Articles refreshed using fallback mechanism');
-        process.exit(0);
-      }
-    }
-    
-    process.exit(1);
-  }
-  
-  if (stderr) {
-    console.error('Scraper error:', stderr);
-    
-    // Try fallback if stderr indicates Python issues
-    if (stderr.includes("python: can't open file") || stderr.includes("not recognized")) {
-      if (createFallbackData()) {
-        console.log('Articles refreshed using fallback mechanism');
-        process.exit(0);
-      }
-    }
-    
-    process.exit(1);
-  }
-  
-  console.log('Scraper output:', stdout);
-  console.log('Articles refreshed successfully');
-  process.exit(0);
-}); 
+// Run the function
+refreshArticles(); 

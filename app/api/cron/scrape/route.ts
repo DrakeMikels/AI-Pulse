@@ -3,6 +3,7 @@ import { exec } from "child_process"
 import { promisify } from "util"
 import path from "path"
 import fs from "fs"
+import { scrapeAndSaveArticles } from "@/lib/scraper"
 
 const execPromise = promisify(exec)
 
@@ -61,43 +62,35 @@ function generateSampleArticles() {
   }))
 }
 
-export async function GET(request: Request) {
+// This endpoint will be called by the Vercel cron job
+export async function GET() {
   try {
-    // Get the absolute path to the scraper script
-    const scraperPath = path.join(process.cwd(), "scripts", "scraper.py")
+    // Check for authorization (optional, can be added for security)
+    // const authHeader = request.headers.get("authorization");
+    // if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    //   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // }
+
+    console.log("Starting article scraping...");
+    const result = await scrapeAndSaveArticles();
     
-    try {
-      // Execute the scraper script with quotes around the path to handle spaces
-      const { stdout, stderr } = await execPromise(`python "${scraperPath}"`)
-      
-      if (stderr) {
-        console.error("Scraper error:", stderr)
-        throw new Error(stderr)
-      }
-      
+    if (result.success) {
       return NextResponse.json({ 
         success: true, 
-        message: "Scraper executed successfully", 
-        output: stdout 
-      })
-    } catch (error) {
-      console.error("Error executing scraper script, using fallback:", error)
-      
-      // Use fallback mechanism if script execution fails
-      const fallbackOutput = await fallbackScraping()
-      
+        message: `Successfully scraped and saved ${result.count} articles` 
+      });
+    } else {
       return NextResponse.json({ 
-        success: true, 
-        message: "Articles refreshed using fallback mechanism", 
-        output: fallbackOutput 
-      })
+        success: false, 
+        error: result.error 
+      }, { status: 500 });
     }
   } catch (error) {
-    console.error("Error running scraper:", error)
+    console.error("Error in scrape API route:", error);
     return NextResponse.json({ 
       success: false, 
-      error: error instanceof Error ? error.message : "Unknown error" 
-    }, { status: 500 })
+      error: String(error) 
+    }, { status: 500 });
   }
 }
 
