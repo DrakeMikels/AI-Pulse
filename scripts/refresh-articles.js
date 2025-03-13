@@ -6,7 +6,7 @@ const scraperPath = path.join(__dirname, 'scraper.py');
 
 console.log('Executing scraper script:', scraperPath);
 
-// Execute the scraper script
+// Execute the scraper script with quotes around the path to handle spaces
 exec(`python "${scraperPath}"`, (error, stdout, stderr) => {
   if (error) {
     console.error('Error running scraper:', error);
