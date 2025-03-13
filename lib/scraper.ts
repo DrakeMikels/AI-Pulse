@@ -57,10 +57,19 @@ const sources: Source[] = [
   }
 ];
 
+// Define interface for RSS article objects
+interface RssArticleItem {
+  title?: string;
+  link?: string;
+  description?: string;
+  content?: string;
+  pubDate?: string;
+}
+
 /**
  * Scrape articles from an RSS feed
  */
-async function scrapeRss(url: string, sourceName: string) {
+async function scrapeRss(url: string, sourceName: string): Promise<RssArticleItem[]> {
   try {
     const headers = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
@@ -73,7 +82,7 @@ async function scrapeRss(url: string, sourceName: string) {
     const result = await parseStringPromise(response.data);
     
     // Find all items (articles)
-    const articles = [];
+    const articles: RssArticleItem[] = [];
     
     // Handle different RSS formats
     const items = result.rss?.channel?.[0]?.item || [];
@@ -91,7 +100,7 @@ async function scrapeRss(url: string, sourceName: string) {
       }
       
       // Create a simple article object
-      const articleObj = {
+      const articleObj: RssArticleItem = {
         title,
         link,
         description,
@@ -281,84 +290,154 @@ function extractSimpleTopics(content: string, title: string) {
 async function scrapeArticles(): Promise<Article[]> {
   try {
     const allArticles: Article[] = [];
+    console.log(`Starting to scrape ${sources.length} sources...`);
 
     for (const source of sources) {
       try {
+        console.log(`Attempting to scrape source: ${source.url} (type: ${source.type})`);
         let sourceArticles: Article[] = [];
 
         if (source.type === 'web') {
-          const response = await axios.get(source.url);
-          const $ = cheerio.load(response.data);
-          
-          sourceArticles = $(source.selector)
-            .map((_, el) => {
-              const title = $(el).find(source.title_selector).text().trim();
-              const link = $(el).find(source.link_selector).attr('href');
-              const fullLink = link?.startsWith('http') ? link : `${source.base_url}${link}`;
-              const currentDate = new Date().toISOString();
-              
-              return {
-                id: uuidv4(),
-                title,
-                url: fullLink,
-                source: source.url,
-                publishedAt: currentDate,
-                createdAt: currentDate,
-                content: '',
-                summary: '',
-                imageUrl: `/placeholder.svg?height=200&width=400&text=${encodeURIComponent(source.url)}`,
-                topics: [],
-                bookmarked: false
-              };
-            })
-            .get()
-            .filter(article => article.title && article.url);
-        } else if (source.type === 'rss') {
-          // Handle RSS feed
-          const rssArticles = await scrapeRss(source.url, source.url);
-          
-          for (const rssArticle of rssArticles) {
-            try {
-              const title = rssArticle.title;
-              const link = rssArticle.link;
-              
-              if (!title || !link) continue;
-              
-              // Get additional article details
-              const articleDetails = await scrapeArticle(link);
-              
-              // Combine content from RSS and article page
-              const fullContent = rssArticle.content || rssArticle.description || articleDetails.content;
-              
-              // Generate summary and extract topics
-              const summary = generateSimpleSummary(fullContent, title);
-              const topics = extractSimpleTopics(fullContent, title);
-              
-              // Create article object
-              const article: Article = {
-                id: uuidv4(),
-                title,
-                summary,
-                content: fullContent,
-                url: link,
-                imageUrl: articleDetails.imageUrl || `/placeholder.svg?height=200&width=400&text=${encodeURIComponent(source.url)}`,
-                source: source.url,
-                topics,
-                publishedAt: new Date().toISOString(),
-                createdAt: new Date().toISOString()
-              };
-              
-              sourceArticles.push(article);
-            } catch (error) {
-              console.error(`Error processing RSS article:`, error);
+          console.log(`Making web request to ${source.url}...`);
+          try {
+            const headers = {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+              'Accept': 'text/html,application/xhtml+xml,application/xml',
+              'Accept-Language': 'en-US,en;q=0.9',
+            };
+            
+            const response = await axios.get(source.url, { 
+              headers,
+              timeout: 10000, // 10 second timeout
+              validateStatus: (status) => true // Accept any status code to log it
+            });
+            
+            console.log(`Response from ${source.url}: status=${response.status}, content-type=${response.headers['content-type']}`);
+            
+            if (response.status !== 200) {
+              console.error(`Error status code ${response.status} from ${source.url}`);
+              continue;
             }
+            
+            const $ = cheerio.load(response.data);
+            console.log(`Loaded HTML, looking for selector: ${source.selector}`);
+            const elements = $(source.selector);
+            console.log(`Found ${elements.length} elements matching selector`);
+            
+            sourceArticles = $(source.selector)
+              .map((_, el) => {
+                const title = $(el).find(source.title_selector).text().trim();
+                const link = $(el).find(source.link_selector).attr('href');
+                console.log(`Found article: title=${title}, link=${link}`);
+                const fullLink = link?.startsWith('http') ? link : `${source.base_url}${link}`;
+                const currentDate = new Date().toISOString();
+                
+                return {
+                  id: uuidv4(),
+                  title,
+                  url: fullLink,
+                  source: source.url,
+                  publishedAt: currentDate,
+                  createdAt: currentDate,
+                  content: '',
+                  summary: '',
+                  imageUrl: `/placeholder.svg?height=200&width=400&text=${encodeURIComponent(source.url)}`,
+                  topics: [],
+                  bookmarked: false
+                };
+              })
+              .get()
+              .filter(article => article.title && article.url);
+              
+            console.log(`Filtered to ${sourceArticles.length} valid articles`);
+          } catch (webError: any) {
+            console.error(`Error making web request to ${source.url}:`, webError);
+            console.error(`Error details: ${webError.message}`);
+            if (webError.response) {
+              console.error(`Response status: ${webError.response.status}`);
+              console.error(`Response headers:`, webError.response.headers);
+            }
+            continue;
+          }
+        } else if (source.type === 'rss') {
+          console.log(`Making RSS request to ${source.url}...`);
+          try {
+            const headers = {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+              'Accept': 'application/rss+xml,application/xml,text/xml',
+            };
+            
+            const response = await axios.get(source.url, { 
+              headers,
+              timeout: 10000,
+              validateStatus: (status) => true
+            });
+            
+            console.log(`RSS response from ${source.url}: status=${response.status}, content-type=${response.headers['content-type']}`);
+            
+            if (response.status !== 200) {
+              console.error(`Error status code ${response.status} from RSS ${source.url}`);
+              continue;
+            }
+            
+            // Handle RSS feed
+            const rssArticles = await scrapeRss(source.url, source.url);
+            console.log(`Found ${rssArticles.length} articles in RSS feed`);
+            
+            for (const rssArticle of rssArticles) {
+              try {
+                const title = rssArticle.title;
+                const link = rssArticle.link;
+                
+                if (!title || !link) continue;
+                
+                // Get additional article details
+                const articleDetails = await scrapeArticle(link);
+                
+                // Combine content from RSS and article page
+                const fullContent = rssArticle.content || rssArticle.description || articleDetails.content;
+                
+                // Generate summary and extract topics
+                const summary = generateSimpleSummary(fullContent, title);
+                const topics = extractSimpleTopics(fullContent, title);
+                
+                // Create article object with all required properties
+                const article: Article = {
+                  id: uuidv4(),
+                  title,
+                  summary,
+                  content: fullContent,
+                  url: link,
+                  imageUrl: articleDetails.imageUrl || `/placeholder.svg?height=200&width=400&text=${encodeURIComponent(source.url)}`,
+                  source: source.url,
+                  topics,
+                  publishedAt: new Date().toISOString(),
+                  createdAt: new Date().toISOString(),
+                  bookmarked: false
+                };
+                
+                sourceArticles.push(article);
+              } catch (error) {
+                console.error(`Error processing RSS article:`, error);
+              }
+            }
+          } catch (rssError: any) {
+            console.error(`Error making RSS request to ${source.url}:`, rssError);
+            console.error(`Error details: ${rssError.message}`);
+            if (rssError.response) {
+              console.error(`Response status: ${rssError.response.status}`);
+              console.error(`Response headers:`, rssError.response.headers);
+            }
+            continue;
           }
         }
 
         // Process the first 5 articles
+        console.log(`Processing up to 5 articles from source ${source.url}`);
         for (const article of sourceArticles.slice(0, 5)) {
           try {
             // Get additional article details
+            console.log(`Scraping article details from ${article.url}`);
             const articleDetails = await scrapeArticle(article.url);
             
             // Generate summary and extract topics
@@ -381,8 +460,9 @@ async function scrapeArticles(): Promise<Article[]> {
             };
             
             allArticles.push(articleObj);
+            console.log(`Successfully processed article: ${article.title}`);
           } catch (error) {
-            console.error(`Error processing article:`, error);
+            console.error(`Error processing article ${article.url}:`, error);
           }
         }
       } catch (error) {
@@ -390,6 +470,7 @@ async function scrapeArticles(): Promise<Article[]> {
       }
     }
 
+    console.log(`Scraping complete. Found ${allArticles.length} articles in total.`);
     return allArticles;
   } catch (error) {
     console.error('Error scraping articles:', error);
@@ -444,7 +525,8 @@ function generateFallbackArticles(): Article[] {
     source: sources[i % sources.length],
     topics: [topics[i % topics.length], topics[(i + 1) % topics.length]],
     publishedAt: new Date().toISOString(),
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    bookmarked: false
   }));
 }
 
