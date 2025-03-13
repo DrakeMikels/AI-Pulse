@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, ReactNode } from "react"
+import React, { useState, ReactNode } from "react"
 import { DashboardHeader } from "@/components/dashboard-header"
 import { DashboardSidebar } from "@/components/dashboard-sidebar"
 import { ArticleGrid } from "@/components/article-grid"

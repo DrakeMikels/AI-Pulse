@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Search } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 
 interface SearchBarProps {
   value: string
@@ -14,23 +14,26 @@ interface SearchBarProps {
 export function SearchBar({ value, onChange }: SearchBarProps) {
   const [searchQuery, setSearchQuery] = useState(value)
   const router = useRouter()
-  const searchParams = useSearchParams()
 
   // Initialize search query from URL on mount
   useEffect(() => {
-    const queryParam = searchParams.get("q")
+    // Get URL search params using window.location instead of useSearchParams
+    const urlParams = new URLSearchParams(window.location.search);
+    const queryParam = urlParams.get("q")
     if (queryParam) {
       setSearchQuery(queryParam)
       onChange(queryParam)
     }
-  }, [searchParams, onChange])
+  }, [onChange])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     onChange(searchQuery)
     
     // Update URL with search query
-    const params = new URLSearchParams(searchParams.toString())
+    const currentUrl = new URL(window.location.href);
+    const params = new URLSearchParams(currentUrl.search);
+    
     if (searchQuery) {
       params.set("q", searchQuery)
     } else {
