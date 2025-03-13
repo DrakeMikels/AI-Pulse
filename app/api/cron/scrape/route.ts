@@ -10,8 +10,8 @@ export async function GET(request: Request) {
     // Get the absolute path to the scraper script
     const scraperPath = path.join(process.cwd(), "scripts", "scraper.py")
     
-    // Execute the scraper script
-    const { stdout, stderr } = await execPromise(`python ${scraperPath}`)
+    // Execute the scraper script with quotes around the path to handle spaces
+    const { stdout, stderr } = await execPromise(`python "${scraperPath}"`)
     
     if (stderr) {
       console.error("Scraper error:", stderr)
