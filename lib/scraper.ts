@@ -1,10 +1,11 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { v4 as uuidv4 } from 'uuid';
-import fs from 'fs';
-import path from 'path';
 import { parseStringPromise } from 'xml2js';
 import type { Article } from '@/types/article';
+
+// In-memory storage for articles (will be reset on server restart)
+let cachedArticles: Article[] = [];
 
 // Sources to scrape
 const SOURCES = {
@@ -316,26 +317,51 @@ export async function scrapeSources(): Promise<Article[]> {
 }
 
 /**
- * Save articles to a JSON file
+ * Save articles to in-memory cache
  */
-export async function saveArticles(articles: Article[]) {
+export function saveArticles(articles: Article[]): boolean {
   try {
-    const dataPath = path.join(process.cwd(), "data", "articles.json");
-    
-    // Create directory if it doesn't exist
-    const dir = path.dirname(dataPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    
-    // Write to file
-    fs.writeFileSync(dataPath, JSON.stringify(articles, null, 2));
-    console.log(`Saved ${articles.length} articles to ${dataPath}`);
+    // Store in memory
+    cachedArticles = articles;
+    console.log(`Saved ${articles.length} articles to in-memory cache`);
     return true;
   } catch (error) {
     console.error("Error saving articles:", error);
     return false;
   }
+}
+
+/**
+ * Get articles from in-memory cache
+ */
+export function getArticles(): Article[] {
+  // If no articles in cache, return empty array
+  if (cachedArticles.length === 0) {
+    // Generate fallback articles if needed
+    return generateFallbackArticles();
+  }
+  return cachedArticles;
+}
+
+/**
+ * Generate fallback articles when no real articles are available
+ */
+function generateFallbackArticles(): Article[] {
+  const sources = ["Anthropic", "OpenAI", "Google AI", "DeepMind", "Meta AI"];
+  const topics = ["LLM", "Computer Vision", "AI Safety", "Multimodal AI", "Research"];
+  
+  return Array.from({ length: 10 }, (_, i) => ({
+    id: `sample-${i}-${Date.now()}`,
+    title: `Sample Article ${i + 1}`,
+    summary: `This is a sample article summary for article ${i + 1}.`,
+    content: `This is the content of sample article ${i + 1}. It contains information about AI advancements.`,
+    url: `https://example.com/article-${i + 1}`,
+    imageUrl: `/placeholder.svg?height=200&width=400&text=AI+Article+${i + 1}`,
+    source: sources[i % sources.length],
+    topics: [topics[i % topics.length], topics[(i + 1) % topics.length]],
+    publishedAt: new Date().toISOString(),
+    createdAt: new Date().toISOString()
+  }));
 }
 
 /**
@@ -345,8 +371,8 @@ export async function scrapeAndSaveArticles() {
   try {
     const articles = await scrapeSources();
     if (articles.length > 0) {
-      await saveArticles(articles);
-      return { success: true, count: articles.length };
+      const success = saveArticles(articles);
+      return { success, count: articles.length };
     } else {
       return { success: false, error: "No articles found" };
     }
