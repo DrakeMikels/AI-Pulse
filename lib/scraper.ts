@@ -30,9 +30,9 @@ type Source = WebSource | RssSource;
 // Define sources
 const sources: Source[] = [
   {
-    url: 'https://www.anthropic.com/news',
+    url: 'https://www.anthropic.com/blog',
     type: 'web',
-    selector: '.news-card',
+    selector: '.blog-card',
     title_selector: 'h3',
     link_selector: 'a',
     base_url: 'https://www.anthropic.com'
@@ -46,14 +46,30 @@ const sources: Source[] = [
     base_url: 'https://blog.google'
   },
   {
-    url: 'https://www.wired.com/feed/tag/artificial-intelligence/latest/rss',
-    type: 'rss',
-    base_url: 'https://www.wired.com'
+    url: 'https://news.mit.edu/topic/artificial-intelligence2',
+    type: 'web',
+    selector: '.article-item',
+    title_selector: 'h3',
+    link_selector: 'a',
+    base_url: 'https://news.mit.edu'
   },
   {
-    url: 'https://ai.googleblog.com/feeds/posts/default',
+    url: 'https://www.theverge.com/ai-artificial-intelligence',
+    type: 'web',
+    selector: '.duet--content-cards--content-card',
+    title_selector: 'h2',
+    link_selector: 'a',
+    base_url: ''
+  },
+  {
+    url: 'https://techcrunch.com/category/artificial-intelligence/feed/',
     type: 'rss',
-    base_url: 'https://ai.googleblog.com'
+    base_url: 'https://techcrunch.com'
+  },
+  {
+    url: 'https://www.technologyreview.com/topic/artificial-intelligence/feed',
+    type: 'rss',
+    base_url: 'https://www.technologyreview.com'
   }
 ];
 
