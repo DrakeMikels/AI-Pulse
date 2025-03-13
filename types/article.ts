@@ -9,5 +9,6 @@ export interface Article {
   topics: string[]
   publishedAt: string
   createdAt: string
+  bookmarked: boolean
 }
 

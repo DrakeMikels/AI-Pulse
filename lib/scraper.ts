@@ -7,35 +7,55 @@ import type { Article } from '@/types/article';
 // In-memory storage for articles (will be reset on server restart)
 let cachedArticles: Article[] = [];
 
-// Sources to scrape
-const SOURCES = {
-  "Anthropic": {
-    "url": "https://www.anthropic.com/news",
-    "type": "html",
-    "selector": "li, article",
-    "title_selector": "h3, h2",
-    "link_selector": "a",
-    "base_url": "https://www.anthropic.com"
+// Define source types
+interface BaseSource {
+  url: string;
+  type: string;
+  base_url: string;
+}
+
+interface WebSource extends BaseSource {
+  type: 'web';
+  selector: string;
+  title_selector: string;
+  link_selector: string;
+}
+
+interface RssSource extends BaseSource {
+  type: 'rss';
+}
+
+type Source = WebSource | RssSource;
+
+// Define sources
+const sources: Source[] = [
+  {
+    url: 'https://www.anthropic.com/news',
+    type: 'web',
+    selector: '.news-card',
+    title_selector: 'h3',
+    link_selector: 'a',
+    base_url: 'https://www.anthropic.com'
   },
-  "Google AI": {
-    "url": "https://blog.google/technology/ai/",
-    "type": "html",
-    "selector": "article",
-    "title_selector": "h3, h2",
-    "link_selector": "a",
-    "base_url": "https://blog.google"
+  {
+    url: 'https://blog.google/technology/ai/',
+    type: 'web',
+    selector: '.uni-item',
+    title_selector: '.uni-item__title',
+    link_selector: 'a.uni-item__link',
+    base_url: 'https://blog.google'
   },
-  "Wired AI": {
-    "url": "https://www.wired.com/feed/tag/ai/latest/rss",
-    "type": "rss",
-    "base_url": "https://www.wired.com"
+  {
+    url: 'https://www.wired.com/feed/tag/artificial-intelligence/latest/rss',
+    type: 'rss',
+    base_url: 'https://www.wired.com'
   },
-  "AI Blog": {
-    "url": "https://www.artificial-intelligence.blog/ai-news?format=rss",
-    "type": "rss",
-    "base_url": "https://www.artificial-intelligence.blog"
+  {
+    url: 'https://ai.googleblog.com/feeds/posts/default',
+    type: 'rss',
+    base_url: 'https://ai.googleblog.com'
   }
-};
+];
 
 /**
  * Scrape articles from an RSS feed
@@ -105,19 +125,78 @@ async function scrapeArticle(url: string) {
     
     // Extract article content
     let content = "";
-    const articleBody = $('article').length ? $('article') : $('main');
     
+    // Try different selectors to find the main content
+    const selectors = [
+      'article', 
+      'main', 
+      '.post-content', 
+      '.article-content', 
+      '.entry-content', 
+      '.content',
+      '#content'
+    ];
+    
+    let articleBody;
+    
+    // Find the first selector that matches
+    for (const selector of selectors) {
+      if ($(selector).length) {
+        articleBody = $(selector);
+        break;
+      }
+    }
+    
+    // If no selector matched, use the body
+    if (!articleBody || !articleBody.length) {
+      articleBody = $('body');
+    }
+    
+    // Extract paragraphs
     if (articleBody.length) {
+      // Remove unwanted elements
+      articleBody.find('script, style, nav, header, footer, .sidebar, .comments, .related, .advertisement').remove();
+      
+      // Get all paragraphs
       const paragraphs = articleBody.find('p');
-      content = paragraphs.map((_, el) => $(el).text()).get().join(' ');
+      
+      if (paragraphs.length) {
+        // Extract text from paragraphs
+        content = paragraphs.map((_, el) => {
+          // Preserve some basic HTML formatting
+          const html = $(el).html() || '';
+          return html
+            .replace(/<br\s*\/?>/g, '\n')  // Convert <br> to newlines
+            .replace(/<\/?(b|strong|i|em)>/g, ''); // Remove basic formatting tags
+        }).get().join('\n\n');
+      } else {
+        // If no paragraphs found, get all text
+        content = articleBody.text().trim();
+      }
     }
     
     // Extract image if available
     let imageUrl = null;
-    const mainImage = $('meta[property="og:image"]');
-    if (mainImage.length) {
-      imageUrl = mainImage.attr('content');
+    
+    // Try to get the OpenGraph image first
+    const ogImage = $('meta[property="og:image"]');
+    if (ogImage.length) {
+      imageUrl = ogImage.attr('content');
     }
+    
+    // If no OG image, try other common image selectors
+    if (!imageUrl) {
+      const mainImage = $('article img, .featured-image img, .post-thumbnail img').first();
+      if (mainImage.length) {
+        imageUrl = mainImage.attr('src');
+      }
+    }
+    
+    // Clean up the content
+    content = content
+      .replace(/\n{3,}/g, '\n\n')  // Replace multiple newlines with just two
+      .replace(/\s{2,}/g, ' ')     // Replace multiple spaces with a single space
+      .trim();
     
     return {
       content,
@@ -197,92 +276,90 @@ function extractSimpleTopics(content: string, title: string) {
 }
 
 /**
- * Scrape all configured sources
+ * Scrape articles from all sources
  */
-export async function scrapeSources(): Promise<Article[]> {
-  const allArticles: Article[] = [];
-  
-  for (const [sourceName, config] of Object.entries(SOURCES)) {
-    console.log(`Scraping ${sourceName}...`);
-    
-    if (config.type === "rss") {
-      // Handle RSS feed
-      const rssArticles = await scrapeRss(config.url, sourceName);
-      
-      for (const rssArticle of rssArticles) {
-        try {
-          const title = rssArticle.title;
-          const link = rssArticle.link;
-          
-          if (!title || !link) continue;
-          
-          // Get additional article details
-          const articleDetails = await scrapeArticle(link);
-          
-          // Combine content from RSS and article page
-          const fullContent = rssArticle.content || rssArticle.description || articleDetails.content;
-          
-          // Generate summary and extract topics
-          const summary = generateSimpleSummary(fullContent, title);
-          const topics = extractSimpleTopics(fullContent, title);
-          
-          // Create article object
-          const article: Article = {
-            id: uuidv4(),
-            title,
-            summary,
-            content: fullContent,
-            url: link,
-            imageUrl: articleDetails.imageUrl || `/placeholder.svg?height=200&width=400&text=${encodeURIComponent(sourceName)}`,
-            source: sourceName,
-            topics,
-            publishedAt: new Date().toISOString(),
-            createdAt: new Date().toISOString()
-          };
-          
-          allArticles.push(article);
-        } catch (error) {
-          console.error(`Error processing RSS article:`, error);
-        }
-      }
-    } else if (config.type === "html") {
-      // Handle HTML page
+async function scrapeArticles(): Promise<Article[]> {
+  try {
+    const allArticles: Article[] = [];
+
+    for (const source of sources) {
       try {
-        const headers = {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        };
-        
-        const response = await axios.get(config.url, { headers });
-        const $ = cheerio.load(response.data);
-        
-        // Find all article elements
-        const articleElements = $(config.selector);
-        const articles = [];
-        
-        articleElements.each((_, element) => {
-          const titleElement = $(element).find(config.title_selector);
-          const linkElement = $(element).find(config.link_selector);
+        let sourceArticles: Article[] = [];
+
+        if (source.type === 'web') {
+          const response = await axios.get(source.url);
+          const $ = cheerio.load(response.data);
           
-          if (titleElement.length && linkElement.length) {
-            const title = titleElement.text().trim();
-            let link = linkElement.attr('href');
-            
-            // Handle relative URLs
-            if (link && link.startsWith('/')) {
-              link = `${config.base_url}${link}`;
-            }
-            
-            if (title && link) {
-              articles.push({ title, link });
+          sourceArticles = $(source.selector)
+            .map((_, el) => {
+              const title = $(el).find(source.title_selector).text().trim();
+              const link = $(el).find(source.link_selector).attr('href');
+              const fullLink = link?.startsWith('http') ? link : `${source.base_url}${link}`;
+              const currentDate = new Date().toISOString();
+              
+              return {
+                id: uuidv4(),
+                title,
+                url: fullLink,
+                source: source.url,
+                publishedAt: currentDate,
+                createdAt: currentDate,
+                content: '',
+                summary: '',
+                imageUrl: `/placeholder.svg?height=200&width=400&text=${encodeURIComponent(source.url)}`,
+                topics: [],
+                bookmarked: false
+              };
+            })
+            .get()
+            .filter(article => article.title && article.url);
+        } else if (source.type === 'rss') {
+          // Handle RSS feed
+          const rssArticles = await scrapeRss(source.url, source.url);
+          
+          for (const rssArticle of rssArticles) {
+            try {
+              const title = rssArticle.title;
+              const link = rssArticle.link;
+              
+              if (!title || !link) continue;
+              
+              // Get additional article details
+              const articleDetails = await scrapeArticle(link);
+              
+              // Combine content from RSS and article page
+              const fullContent = rssArticle.content || rssArticle.description || articleDetails.content;
+              
+              // Generate summary and extract topics
+              const summary = generateSimpleSummary(fullContent, title);
+              const topics = extractSimpleTopics(fullContent, title);
+              
+              // Create article object
+              const article: Article = {
+                id: uuidv4(),
+                title,
+                summary,
+                content: fullContent,
+                url: link,
+                imageUrl: articleDetails.imageUrl || `/placeholder.svg?height=200&width=400&text=${encodeURIComponent(source.url)}`,
+                source: source.url,
+                topics,
+                publishedAt: new Date().toISOString(),
+                createdAt: new Date().toISOString()
+              };
+              
+              sourceArticles.push(article);
+            } catch (error) {
+              console.error(`Error processing RSS article:`, error);
             }
           }
-        });
-        
+        }
+
         // Process the first 5 articles
-        for (const article of articles.slice(0, 5)) {
+        for (const article of sourceArticles.slice(0, 5)) {
           try {
             // Get additional article details
-            const articleDetails = await scrapeArticle(article.link);
+            const articleDetails = await scrapeArticle(article.url);
             
             // Generate summary and extract topics
             const summary = generateSimpleSummary(articleDetails.content, article.title);
@@ -294,26 +371,30 @@ export async function scrapeSources(): Promise<Article[]> {
               title: article.title,
               summary,
               content: articleDetails.content,
-              url: article.link,
-              imageUrl: articleDetails.imageUrl || `/placeholder.svg?height=200&width=400&text=${encodeURIComponent(sourceName)}`,
-              source: sourceName,
+              url: article.url,
+              imageUrl: articleDetails.imageUrl || `/placeholder.svg?height=200&width=400&text=${encodeURIComponent(source.url)}`,
+              source: article.source,
               topics,
-              publishedAt: new Date().toISOString(),
-              createdAt: new Date().toISOString()
+              publishedAt: article.publishedAt,
+              createdAt: new Date().toISOString(),
+              bookmarked: false
             };
             
             allArticles.push(articleObj);
           } catch (error) {
-            console.error(`Error processing HTML article:`, error);
+            console.error(`Error processing article:`, error);
           }
         }
       } catch (error) {
-        console.error(`Error scraping HTML source ${config.url}:`, error);
+        console.error(`Error scraping source ${source.url}:`, error);
       }
     }
+
+    return allArticles;
+  } catch (error) {
+    console.error('Error scraping articles:', error);
+    return [];
   }
-  
-  return allArticles;
 }
 
 /**
@@ -375,7 +456,7 @@ export async function scrapeAndSaveArticles() {
   
   try {
     // Scrape articles from all sources
-    const articles = await scrapeSources();
+    const articles = await scrapeArticles();
     
     if (articles.length === 0) {
       console.log("No articles found, using fallback articles");

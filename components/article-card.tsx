@@ -7,7 +7,7 @@ import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { useToast } from "@/components/ui/use-toast"
-import { timeAgo, formatDate } from "@/lib/utils"
+import { timeAgo, formatDate, cleanArticleContent } from "@/lib/utils"
 import type { Article } from "@/types/article"
 
 interface ArticleCardProps {
@@ -61,6 +61,9 @@ export function ArticleCard({ article }: ArticleCardProps) {
         .catch((error) => console.error("Error copying to clipboard:", error))
     }
   }
+
+  // Clean the article content for display
+  const cleanedContent = cleanArticleContent(article.content);
 
   return (
     <>
@@ -143,8 +146,8 @@ export function ArticleCard({ article }: ArticleCardProps) {
             <div className="space-y-4">
               <p className="text-lg font-medium">{article.summary}</p>
               <div className="prose max-w-none dark:prose-invert">
-                {article.content.split('\n').map((paragraph, index) => (
-                  <p key={index}>{paragraph}</p>
+                {cleanedContent.split('\n\n').map((paragraph, index) => (
+                  paragraph.trim() ? <p key={index}>{paragraph}</p> : null
                 ))}
               </div>
               <div className="flex flex-wrap gap-2 pt-4">
