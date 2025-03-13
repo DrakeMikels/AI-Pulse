@@ -321,7 +321,7 @@ export async function scrapeSources(): Promise<Article[]> {
  */
 export function saveArticles(articles: Article[]): boolean {
   try {
-    // Store in memory
+    // Store articles in memory
     cachedArticles = articles;
     console.log(`Saved ${articles.length} articles to in-memory cache`);
     return true;
@@ -332,31 +332,34 @@ export function saveArticles(articles: Article[]): boolean {
 }
 
 /**
- * Get articles from in-memory cache
+ * Get articles from in-memory cache or generate fallback articles
  */
 export function getArticles(): Article[] {
-  // If no articles in cache, return empty array
-  if (cachedArticles.length === 0) {
-    // Generate fallback articles if needed
-    return generateFallbackArticles();
+  // If we have cached articles, return them
+  if (cachedArticles && cachedArticles.length > 0) {
+    console.log(`Returning ${cachedArticles.length} articles from in-memory cache`);
+    return cachedArticles;
   }
-  return cachedArticles;
+  
+  // Otherwise, generate fallback articles
+  console.log("No articles in cache, generating fallback articles");
+  return generateFallbackArticles();
 }
 
 /**
- * Generate fallback articles when no real articles are available
+ * Generate fallback articles for when no real articles are available
  */
 function generateFallbackArticles(): Article[] {
-  const sources = ["Anthropic", "OpenAI", "Google AI", "DeepMind", "Meta AI"];
-  const topics = ["LLM", "Computer Vision", "AI Safety", "Multimodal AI", "Research"];
+  const sources = ["Anthropic", "OpenAI", "Google AI", "Wired AI", "AI Blog"];
+  const topics = ["LLM", "Computer Vision", "AI Safety", "Multimodal AI", "Research", "Technology"];
   
   return Array.from({ length: 10 }, (_, i) => ({
     id: `sample-${i}-${Date.now()}`,
     title: `Sample Article ${i + 1}`,
-    summary: `This is a sample article summary for article ${i + 1}.`,
-    content: `This is the content of sample article ${i + 1}. It contains information about AI advancements.`,
+    summary: `This is a sample article summary for article ${i + 1}. Real articles will appear once the scraper runs.`,
+    content: `This is the content of sample article ${i + 1}. It contains information about AI advancements. Real articles will appear once the scraper runs.`,
     url: `https://example.com/article-${i + 1}`,
-    imageUrl: `/placeholder.svg?height=200&width=400&text=AI+Article+${i + 1}`,
+    imageUrl: `https://placehold.co/600x400?text=AI+Article+${i + 1}`,
     source: sources[i % sources.length],
     topics: [topics[i % topics.length], topics[(i + 1) % topics.length]],
     publishedAt: new Date().toISOString(),
@@ -368,16 +371,44 @@ function generateFallbackArticles(): Article[] {
  * Main function to scrape and save articles
  */
 export async function scrapeAndSaveArticles() {
+  console.log("Starting article refresh...");
+  
   try {
+    // Scrape articles from all sources
     const articles = await scrapeSources();
-    if (articles.length > 0) {
-      const success = saveArticles(articles);
-      return { success, count: articles.length };
-    } else {
-      return { success: false, error: "No articles found" };
+    
+    if (articles.length === 0) {
+      console.log("No articles found, using fallback articles");
+      const fallbackArticles = generateFallbackArticles();
+      saveArticles(fallbackArticles);
+      return { 
+        success: false, 
+        error: "No articles found from any source", 
+        count: fallbackArticles.length 
+      };
     }
+    
+    // Save the articles
+    const saved = saveArticles(articles);
+    
+    if (!saved) {
+      return { 
+        success: false, 
+        error: "Failed to save articles", 
+        count: 0 
+      };
+    }
+    
+    return { 
+      success: true, 
+      count: articles.length 
+    };
   } catch (error) {
-    console.error("Error in scrape and save:", error);
-    return { success: false, error: String(error) };
+    console.error("Error in scrapeAndSaveArticles:", error);
+    return { 
+      success: false, 
+      error: String(error), 
+      count: 0 
+    };
   }
 } 
