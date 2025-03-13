@@ -1,0 +1,18 @@
+{
+  "buildCommand": "npm run build",
+  "devCommand": "next dev",
+  "installCommand": "npm install",
+  "framework": "nextjs",
+  "outputDirectory": ".next",
+  "regions": ["iad1"],
+  "env": {
+    "OPENAI_API_KEY": "@openai-api-key"
+  },
+  "crons": [
+    {
+      "path": "/api/cron/scrape",
+      "schedule": "0 */6 * * *"
+    }
+  ]
+}
+
