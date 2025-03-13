@@ -43,4 +43,5 @@ venv/
 env/
 
 # data
-/data
+/data/*
+!/data/.gitkeep
