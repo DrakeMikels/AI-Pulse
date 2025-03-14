@@ -7,6 +7,19 @@ import type { Article } from '@/types/article';
 // In-memory storage for articles (will be reset on server restart)
 let cachedArticles: Article[] = [];
 
+// User agent rotation to avoid being blocked
+const USER_AGENTS = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:90.0) Gecko/20100101 Firefox/90.0',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.2 Safari/605.1.15',
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36'
+];
+
+function getRandomUserAgent() {
+  return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+}
+
 // Sources to scrape
 const SOURCES = {
   "AWS ML": {
@@ -57,10 +70,16 @@ const SOURCES = {
 async function scrapeRss(url: string, sourceName: string) {
   try {
     const headers = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      'User-Agent': getRandomUserAgent(),
+      'Accept': 'application/rss+xml, application/xml, text/xml, application/atom+xml, text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.5'
     };
     
-    const response = await axios.get(url, { headers });
+    const response = await axios.get(url, { 
+      headers,
+      timeout: 10000, // 10 second timeout
+      maxRedirects: 5
+    });
     console.log(`RSS feed status code: ${response.status}`);
     
     // Parse the XML
@@ -111,10 +130,17 @@ async function scrapeRss(url: string, sourceName: string) {
 async function scrapeArticle(url: string) {
   try {
     const headers = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      'User-Agent': getRandomUserAgent(),
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.5',
+      'Referer': new URL(url).origin
     };
     
-    const response = await axios.get(url, { headers });
+    const response = await axios.get(url, { 
+      headers,
+      timeout: 10000, // 10 second timeout
+      maxRedirects: 5
+    });
     const $ = cheerio.load(response.data);
     
     // Extract article content
@@ -216,107 +242,39 @@ function extractSimpleTopics(content: string, title: string) {
 export async function scrapeSources(): Promise<Article[]> {
   const allArticles: Article[] = [];
   
+  // Process sources sequentially to avoid overwhelming the server
   for (const [sourceName, config] of Object.entries(SOURCES)) {
     console.log(`Scraping ${sourceName}...`);
     
-    if (config.type === "rss") {
-      // Handle RSS feed
-      const rssArticles = await scrapeRss(config.url, sourceName);
-      
-      for (const rssArticle of rssArticles) {
-        try {
-          const title = rssArticle.title;
-          const link = rssArticle.link;
-          
-          if (!title || !link) continue;
-          
-          // Get additional article details
-          const articleDetails = await scrapeArticle(link);
-          
-          // Combine content from RSS and article page
-          const fullContent = rssArticle.content || rssArticle.description || articleDetails.content;
-          
-          // Generate summary and extract topics
-          const summary = generateSimpleSummary(fullContent, title);
-          const topics = extractSimpleTopics(fullContent, title);
-          
-          // Create article object
-          const article: Article = {
-            id: uuidv4(),
-            title,
-            summary,
-            content: fullContent,
-            url: link,
-            imageUrl: articleDetails.imageUrl || `/placeholder.svg?height=200&width=400&text=${encodeURIComponent(sourceName)}`,
-            source: sourceName,
-            topics,
-            publishedAt: new Date().toISOString(),
-            createdAt: new Date().toISOString()
-          };
-          
-          allArticles.push(article);
-        } catch (error) {
-          console.error(`Error processing RSS article:`, error);
-        }
-      }
-    } else if (config.type === "html") {
-      // Handle HTML page
-      try {
-        const headers = {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        };
+    try {
+      if (config.type === "rss") {
+        // Handle RSS feed
+        const rssArticles = await scrapeRss(config.url, sourceName);
         
-        const response = await axios.get(config.url, { headers });
-        const $ = cheerio.load(response.data);
-        
-        // Find all article elements
-        const articleElements = $(config.selector);
-        
-        // Define the article type
-        interface HtmlArticle {
-          title: string;
-          link: string;
-        }
-        
-        // Initialize articles array with proper typing
-        const articles: HtmlArticle[] = [];
-        
-        articleElements.each((_, element) => {
-          const titleElement = $(element).find(config.title_selector);
-          const linkElement = $(element).find(config.link_selector);
-          
-          if (titleElement.length && linkElement.length) {
-            const title = titleElement.text().trim();
-            let link = linkElement.attr('href');
-            
-            // Handle relative URLs
-            if (link && link.startsWith('/')) {
-              link = `${config.base_url}${link}`;
-            }
-            
-            if (title && link) {
-              articles.push({ title, link });
-            }
-          }
-        });
-        
-        // Process the first 5 articles
-        for (const article of articles.slice(0, 5)) {
+        for (const rssArticle of rssArticles) {
           try {
+            const title = rssArticle.title;
+            const link = rssArticle.link;
+            
+            if (!title || !link) continue;
+            
             // Get additional article details
-            const articleDetails = await scrapeArticle(article.link);
+            const articleDetails = await scrapeArticle(link);
+            
+            // Combine content from RSS and article page
+            const fullContent = rssArticle.content || rssArticle.description || articleDetails.content;
             
             // Generate summary and extract topics
-            const summary = generateSimpleSummary(articleDetails.content, article.title);
-            const topics = extractSimpleTopics(articleDetails.content, article.title);
+            const summary = generateSimpleSummary(fullContent, title);
+            const topics = extractSimpleTopics(fullContent, title);
             
             // Create article object
-            const articleObj: Article = {
+            const article: Article = {
               id: uuidv4(),
-              title: article.title,
+              title,
               summary,
-              content: articleDetails.content,
-              url: article.link,
+              content: fullContent,
+              url: link,
               imageUrl: articleDetails.imageUrl || `/placeholder.svg?height=200&width=400&text=${encodeURIComponent(sourceName)}`,
               source: sourceName,
               topics,
@@ -324,15 +282,104 @@ export async function scrapeSources(): Promise<Article[]> {
               createdAt: new Date().toISOString()
             };
             
-            allArticles.push(articleObj);
+            allArticles.push(article);
           } catch (error) {
-            console.error(`Error processing HTML article:`, error);
+            console.error(`Error processing RSS article:`, error);
           }
         }
-      } catch (error) {
-        console.error(`Error scraping HTML source ${config.url}:`, error);
+      } else if (config.type === "html") {
+        // Handle HTML page
+        try {
+          const headers = {
+            'User-Agent': getRandomUserAgent(),
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Referer': new URL(config.url).origin
+          };
+          
+          const response = await axios.get(config.url, { 
+            headers,
+            timeout: 15000, // 15 second timeout
+            maxRedirects: 5
+          });
+          const $ = cheerio.load(response.data);
+          
+          // Find all article elements
+          const articleElements = $(config.selector);
+          
+          // Define the article type
+          interface HtmlArticle {
+            title: string;
+            link: string;
+          }
+          
+          // Initialize articles array with proper typing
+          const articles: HtmlArticle[] = [];
+          
+          articleElements.each((_, element) => {
+            const titleElement = $(element).find(config.title_selector);
+            const linkElement = $(element).find(config.link_selector);
+            
+            if (titleElement.length && linkElement.length) {
+              const title = titleElement.text().trim();
+              let link = linkElement.attr('href');
+              
+              // Handle relative URLs
+              if (link && link.startsWith('/')) {
+                link = `${config.base_url}${link}`;
+              }
+              
+              if (title && link) {
+                articles.push({ title, link });
+              }
+            }
+          });
+          
+          console.log(`Found ${articles.length} articles for ${sourceName}`);
+          
+          // Process the first 5 articles
+          // Add a small delay between article scraping to avoid rate limiting
+          for (const article of articles.slice(0, 5)) {
+            try {
+              // Get additional article details
+              const articleDetails = await scrapeArticle(article.link);
+              
+              // Generate summary and extract topics
+              const summary = generateSimpleSummary(articleDetails.content, article.title);
+              const topics = extractSimpleTopics(articleDetails.content, article.title);
+              
+              // Create article object
+              const articleObj: Article = {
+                id: uuidv4(),
+                title: article.title,
+                summary,
+                content: articleDetails.content,
+                url: article.link,
+                imageUrl: articleDetails.imageUrl || `/placeholder.svg?height=200&width=400&text=${encodeURIComponent(sourceName)}`,
+                source: sourceName,
+                topics,
+                publishedAt: new Date().toISOString(),
+                createdAt: new Date().toISOString()
+              };
+              
+              allArticles.push(articleObj);
+              
+              // Add a small delay between article scraping
+              await new Promise(resolve => setTimeout(resolve, 500));
+            } catch (error) {
+              console.error(`Error processing HTML article:`, error);
+            }
+          }
+        } catch (error) {
+          console.error(`Error scraping HTML source ${config.url}:`, error);
+        }
       }
+    } catch (error) {
+      console.error(`Error processing source ${sourceName}:`, error);
     }
+    
+    // Add a delay between sources to avoid overwhelming the server
+    await new Promise(resolve => setTimeout(resolve, 1000));
   }
   
   return allArticles;

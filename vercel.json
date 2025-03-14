@@ -13,6 +13,11 @@
       "path": "/api/cron/scrape",
       "schedule": "0 */6 * * *"
     }
-  ]
+  ],
+  "functions": {
+    "app/api/**/*.ts": {
+      "maxDuration": 60
+    }
+  }
 }
 
