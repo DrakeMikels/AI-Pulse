@@ -19,6 +19,15 @@ export function ArticleCard({ article }: ArticleCardProps) {
   const [isReadingMode, setIsReadingMode] = useState(false)
   const { toast } = useToast()
 
+  // Clean the content by removing image tags and URLs
+  const cleanContent = (content: string) => {
+    // Remove any lines that contain image URLs or src attributes
+    return content
+      .split('\n')
+      .filter(line => !line.includes('src=') && !line.includes('https://storage.googleapis.com/gweb-uniblog-publish'))
+      .join('\n');
+  };
+
   const toggleBookmark = async () => {
     try {
       const method = isBookmarked ? "DELETE" : "POST"
@@ -143,12 +152,19 @@ export function ArticleCard({ article }: ArticleCardProps) {
             <div className="space-y-4">
               <p className="text-lg font-medium">{article.summary}</p>
               <div className="prose max-w-none dark:prose-invert">
-                {article.content
+                {cleanContent(article.content)
                   .replace(/<[^>]*>/g, ' ') // Remove HTML tags
                   .split(/\n+/) // Split by newlines
                   .map((paragraph, index) => {
                     const trimmed = paragraph.trim();
-                    return trimmed ? <p key={index}>{trimmed}</p> : null;
+                    // Skip paragraphs that look like image URLs or src attributes
+                    if (!trimmed || 
+                        trimmed.includes('src=') || 
+                        trimmed.includes('https://storage.googleapis.com/gweb-uniblog-publish') ||
+                        trimmed.includes('<img')) {
+                      return null;
+                    }
+                    return <p key={index}>{trimmed}</p>;
                   })
                   .filter(Boolean) // Remove empty paragraphs
                 }
