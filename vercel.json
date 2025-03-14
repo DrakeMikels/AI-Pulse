@@ -6,12 +6,17 @@
   "outputDirectory": ".next",
   "regions": ["iad1"],
   "env": {
-    "OPENAI_API_KEY": "${OPENAI_API_KEY}"
+    "OPENAI_API_KEY": "${OPENAI_API_KEY}",
+    "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}"
   },
   "crons": [
     {
       "path": "/api/cron/scrape",
       "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/cron/scrape-mcp",
+      "schedule": "30 */6 * * *"
     }
   ],
   "functions": {

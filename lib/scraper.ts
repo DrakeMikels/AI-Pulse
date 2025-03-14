@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { parseStringPromise } from 'xml2js';
 import type { Article } from '@/types/article';
 import Redis from 'ioredis';
+import { fetchArticlesWithMCP } from './mcp-scraper';
 
 // Redis client initialization
 let redisClient: Redis | null = null;
@@ -551,6 +552,71 @@ export async function scrapeAndSaveArticles() {
     };
   } catch (error) {
     console.error("Error in scrapeAndSaveArticles:", error);
+    return { 
+      success: false, 
+      error: String(error), 
+      count: 0 
+    };
+  }
+}
+
+/**
+ * Enhanced function to scrape and save articles with MCP integration
+ */
+export async function scrapeAndSaveArticlesWithMcp() {
+  console.log("Starting enhanced article refresh with MCP...");
+  
+  try {
+    // Get articles using traditional scraping
+    let articles = await scrapeSources();
+    
+    // If the API key is set, also fetch articles using MCP
+    if (process.env.ANTHROPIC_API_KEY) {
+      console.log("MCP integration enabled, fetching additional articles...");
+      const mcpArticles = await fetchArticlesWithMCP();
+      
+      // Combine articles, avoiding duplicates by URL
+      const existingUrls = new Set(articles.map(article => article.url));
+      for (const article of mcpArticles) {
+        if (!existingUrls.has(article.url)) {
+          articles.push(article);
+          existingUrls.add(article.url);
+        }
+      }
+      
+      console.log(`Added ${mcpArticles.length} articles from MCP`);
+    } else {
+      console.log("ANTHROPIC_API_KEY not set, skipping MCP integration");
+    }
+    
+    if (articles.length === 0) {
+      console.log("No articles found, using fallback articles");
+      const fallbackArticles = generateFallbackArticles();
+      await saveArticles(fallbackArticles);
+      return { 
+        success: false, 
+        error: "No articles found from any source", 
+        count: fallbackArticles.length 
+      };
+    }
+    
+    // Save the articles
+    const saved = await saveArticles(articles);
+    
+    if (!saved) {
+      return { 
+        success: false, 
+        error: "Failed to save articles", 
+        count: 0 
+      };
+    }
+    
+    return { 
+      success: true, 
+      count: articles.length 
+    };
+  } catch (error) {
+    console.error("Error in scrapeAndSaveArticlesWithMcp:", error);
     return { 
       success: false, 
       error: String(error), 
