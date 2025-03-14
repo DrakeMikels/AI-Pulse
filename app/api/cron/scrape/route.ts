@@ -64,25 +64,33 @@ function generateSampleArticles() {
 
 // This endpoint will be called by the Vercel cron job
 export async function GET() {
-  console.log('Starting scraper cron job...');
-  
   try {
-    const articles = await scrapeAndSaveArticles();
+    // Check for authorization (optional, can be added for security)
+    // const authHeader = request.headers.get("authorization");
+    // if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    //   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // }
+
+    console.log("Starting article scraping...");
+    const result = await scrapeAndSaveArticles();
     
-    return NextResponse.json({ 
-      success: true, 
-      message: `Successfully refreshed and saved ${articles.length} articles` 
-    });
-  } catch (error) {
-    console.error('Error in scraper cron job:', error);
-    
-    return NextResponse.json(
-      { 
+    if (result.success) {
+      return NextResponse.json({ 
+        success: true, 
+        message: `Successfully scraped and saved ${result.count} articles` 
+      });
+    } else {
+      return NextResponse.json({ 
         success: false, 
-        error: error instanceof Error ? error.message : String(error) 
-      },
-      { status: 500 }
-    );
+        error: result.error 
+      }, { status: 500 });
+    }
+  } catch (error) {
+    console.error("Error in scrape API route:", error);
+    return NextResponse.json({ 
+      success: false, 
+      error: String(error) 
+    }, { status: 500 });
   }
 }
 
