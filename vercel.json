@@ -1,7 +1,7 @@
 {
   "buildCommand": "npm run build",
   "devCommand": "next dev",
-  "installCommand": "npm install --legacy-peer-deps && (pip install -r requirements.txt || echo 'Skipping Python dependencies')",
+  "installCommand": "npm install --legacy-peer-deps && npm install ai @ai-sdk/anthropic && (pip install -r requirements.txt || echo 'Skipping Python dependencies')",
   "framework": "nextjs",
   "outputDirectory": ".next",
   "regions": ["iad1"],
