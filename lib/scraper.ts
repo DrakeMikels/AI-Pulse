@@ -12,6 +12,7 @@ interface BaseSource {
   url: string;
   type: string;
   base_url: string;
+  name: string;
 }
 
 interface WebSource extends BaseSource {
@@ -35,7 +36,17 @@ const sources: Source[] = [
     selector: 'li, article',
     title_selector: 'h3, h2',
     link_selector: 'a',
-    base_url: 'https://www.anthropic.com'
+    base_url: 'https://www.anthropic.com',
+    name: 'Anthropic'
+  },
+  {
+    url: 'https://openai.com/blog',
+    type: 'web',
+    selector: '.post-card',
+    title_selector: 'h3',
+    link_selector: 'a',
+    base_url: 'https://openai.com',
+    name: 'OpenAI'
   },
   {
     url: 'https://ai.googleblog.com/',
@@ -43,23 +54,17 @@ const sources: Source[] = [
     selector: '.post',
     title_selector: 'h2.title',
     link_selector: 'a.title',
-    base_url: 'https://ai.googleblog.com'
+    base_url: 'https://ai.googleblog.com',
+    name: 'Google AI'
   },
   {
-    url: 'https://news.mit.edu/topic/artificial-intelligence2',
+    url: 'https://www.deepmind.com/blog',
     type: 'web',
-    selector: '.article-item',
+    selector: '.result-card',
     title_selector: 'h3',
     link_selector: 'a',
-    base_url: 'https://news.mit.edu'
-  },
-  {
-    url: 'https://www.theverge.com/ai-artificial-intelligence',
-    type: 'web',
-    selector: '.duet--content-cards--content-card',
-    title_selector: 'h2',
-    link_selector: 'a',
-    base_url: ''
+    base_url: 'https://www.deepmind.com',
+    name: 'DeepMind'
   }
 ];
 
@@ -397,12 +402,12 @@ async function scrapeArticles(): Promise<Article[]> {
                   id: uuidv4(),
                   title,
                   url: fullLink,
-                  source: source.url,
+                  source: source.name,
                   publishedAt: currentDate,
                   createdAt: currentDate,
                   content: '',
                   summary: '',
-                  imageUrl: `/placeholder.svg?height=200&width=400&text=${encodeURIComponent(source.url)}`,
+                  imageUrl: `/placeholder.svg?height=200&width=400&text=${encodeURIComponent(source.name)}`,
                   topics: [],
                   bookmarked: false
                 };
@@ -447,7 +452,7 @@ async function scrapeArticles(): Promise<Article[]> {
             }
             
             // Handle RSS feed
-            const rssArticles = await scrapeRss(source.url, source.url);
+            const rssArticles = await scrapeRss(source.url, source.name);
             console.log(`Found ${rssArticles.length} articles in RSS feed`);
             
             for (const rssArticle of rssArticles) {
@@ -474,8 +479,8 @@ async function scrapeArticles(): Promise<Article[]> {
                   summary,
                   content: fullContent,
                   url: link,
-                  imageUrl: articleDetails.imageUrl || `/placeholder.svg?height=200&width=400&text=${encodeURIComponent(source.url)}`,
-                  source: source.url,
+                  imageUrl: articleDetails.imageUrl || `/placeholder.svg?height=200&width=400&text=${encodeURIComponent(source.name)}`,
+                  source: source.name,
                   topics,
                   publishedAt: new Date().toISOString(),
                   createdAt: new Date().toISOString(),
@@ -517,7 +522,7 @@ async function scrapeArticles(): Promise<Article[]> {
               summary,
               content: articleDetails.content,
               url: article.url,
-              imageUrl: articleDetails.imageUrl || `/placeholder.svg?height=200&width=400&text=${encodeURIComponent(source.url)}`,
+              imageUrl: articleDetails.imageUrl || `/placeholder.svg?height=200&width=400&text=${encodeURIComponent(source.name)}`,
               source: article.source,
               topics,
               publishedAt: article.publishedAt,
@@ -578,22 +583,55 @@ export function getArticles(): Article[] {
  * Generate fallback articles for when no real articles are available
  */
 function generateFallbackArticles(): Article[] {
-  const sources = ["Anthropic", "OpenAI", "Google AI", "Wired AI", "AI Blog"];
+  const sources = ["Anthropic", "OpenAI", "Google AI", "DeepMind", "Meta AI", "Hugging Face"];
   const topics = ["LLM", "Computer Vision", "AI Safety", "Multimodal AI", "Research", "Technology"];
   
-  return Array.from({ length: 10 }, (_, i) => ({
-    id: `sample-${i}-${Date.now()}`,
-    title: `Sample Article ${i + 1}`,
-    summary: `This is a sample article summary for article ${i + 1}. Real articles will appear once the scraper runs.`,
-    content: `This is the content of sample article ${i + 1}. It contains information about AI advancements. Real articles will appear once the scraper runs.`,
-    url: `https://example.com/article-${i + 1}`,
-    imageUrl: `https://placehold.co/600x400?text=AI+Article+${i + 1}`,
-    source: sources[i % sources.length],
-    topics: [topics[i % topics.length], topics[(i + 1) % topics.length]],
-    publishedAt: new Date().toISOString(),
-    createdAt: new Date().toISOString(),
-    bookmarked: false
-  }));
+  // Create more realistic article titles and content
+  const articleTemplates = [
+    {
+      title: "Introducing Our Latest AI Model",
+      summary: "We're excited to announce our newest AI model with improved capabilities across various tasks.",
+      content: "Today, we're thrilled to announce the release of our latest AI model. This new model demonstrates significant improvements in reasoning, safety, and multimodal capabilities. Through extensive training and evaluation, we've created a system that better understands user intent and provides more helpful, harmless, and honest responses. The model shows particular strength in coding, mathematics, and creative tasks while maintaining robust safeguards against potential misuse."
+    },
+    {
+      title: "Advancing AI Safety Research",
+      summary: "Our team has made significant progress in developing new techniques for AI alignment and safety.",
+      content: "AI safety remains one of our top priorities as models become more capable. In our latest research, we've developed novel techniques for improving model alignment with human values and reducing potential risks. Our approach combines reinforcement learning from human feedback with new methods for identifying and mitigating harmful outputs. This work represents an important step toward building AI systems that are not only powerful but also safe and aligned with human intentions."
+    },
+    {
+      title: "New Breakthroughs in Multimodal AI",
+      summary: "Recent advances in combining vision and language capabilities are opening new possibilities.",
+      content: "Our research team has achieved significant breakthroughs in multimodal AI systems that can process both visual and textual information. These models can now understand images with greater detail and accuracy, enabling more natural interactions between humans and AI. Applications range from improved accessibility tools for visually impaired users to advanced content creation assistants. This represents a major step toward AI systems that can perceive and understand the world more like humans do."
+    },
+    {
+      title: "Open-Sourcing Our Latest Tools",
+      summary: "We're releasing new tools and datasets to help the AI research community advance the field.",
+      content: "Today we're excited to announce that we're open-sourcing several key tools and datasets that have been instrumental in our recent research. By sharing these resources with the broader AI community, we hope to accelerate progress and enable more researchers to contribute to solving important problems in the field. The release includes training infrastructure, evaluation frameworks, and curated datasets that can help benchmark model performance across a range of tasks."
+    },
+    {
+      title: "AI for Scientific Discovery",
+      summary: "How our AI systems are helping scientists make new discoveries in biology and chemistry.",
+      content: "AI is increasingly becoming an invaluable tool for scientific research. Our models are now being used by scientists to accelerate discoveries in fields like protein folding, drug design, and materials science. By quickly analyzing vast amounts of data and suggesting promising new directions for investigation, AI can help human researchers focus their efforts and make breakthroughs more efficiently. Recent examples include identifying novel antibiotics candidates and predicting the structure of previously unknown proteins."
+    }
+  ];
+  
+  return Array.from({ length: 10 }, (_, i) => {
+    const template = articleTemplates[i % articleTemplates.length];
+    const source = sources[i % sources.length];
+    return {
+      id: `sample-${i}-${Date.now()}`,
+      title: `${source}: ${template.title}`,
+      summary: template.summary,
+      content: template.content,
+      url: `https://example.com/article-${i + 1}`,
+      imageUrl: `https://placehold.co/600x400?text=${encodeURIComponent(source)}`,
+      source: source,
+      topics: [topics[i % topics.length], topics[(i + 1) % topics.length]],
+      publishedAt: new Date(Date.now() - i * 86400000).toISOString(), // Stagger dates
+      createdAt: new Date().toISOString(),
+      bookmarked: false
+    };
+  });
 }
 
 /**
