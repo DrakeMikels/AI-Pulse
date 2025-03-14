@@ -11,6 +11,8 @@ export async function GET(request: NextRequest) {
   const timeframe = searchParams.get("timeframe")
   const bookmarked = searchParams.get("bookmarked")
 
+  console.log("API Request params:", { query, source, topic, timeframe, bookmarked });
+
   // Get articles from storage (now async with Redis)
   const articles = await getArticles()
   let filteredArticles = [...articles]
@@ -39,7 +41,9 @@ export async function GET(request: NextRequest) {
   // Apply bookmarks filter
   if (bookmarked === "true") {
     const bookmarkedIds = bookmarks.getAll();
+    console.log("Filtering by bookmarks. Bookmarked IDs:", bookmarkedIds);
     filteredArticles = filteredArticles.filter((article) => bookmarkedIds.includes(article.id))
+    console.log("After bookmark filtering, articles count:", filteredArticles.length);
   }
 
   // Apply timeframe filter

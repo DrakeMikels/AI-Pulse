@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { useToast } from "@/components/ui/use-toast"
 import { timeAgo, formatDate } from "@/lib/utils"
 import type { Article } from "@/types/article"
+import { useRouter } from "next/navigation"
 
 interface ArticleCardProps {
   article: Article
@@ -18,6 +19,7 @@ export function ArticleCard({ article }: ArticleCardProps) {
   const [isBookmarked, setIsBookmarked] = useState(false)
   const [isReadingMode, setIsReadingMode] = useState(false)
   const { toast } = useToast()
+  const router = useRouter()
 
   // Check if article is bookmarked on component mount
   useEffect(() => {
@@ -79,6 +81,12 @@ export function ArticleCard({ article }: ArticleCardProps) {
       
       if (response.ok) {
         setIsBookmarked(!isBookmarked)
+        
+        // Force a refresh of the page if we're on the bookmarks page
+        if (window.location.pathname.includes('/bookmarks')) {
+          router.refresh();
+        }
+        
         toast({
           title: isBookmarked ? "Removed from bookmarks" : "Added to bookmarks",
           description: article.title,
