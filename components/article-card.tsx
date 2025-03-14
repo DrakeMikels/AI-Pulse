@@ -19,13 +19,40 @@ export function ArticleCard({ article }: ArticleCardProps) {
   const [isReadingMode, setIsReadingMode] = useState(false)
   const { toast } = useToast()
 
-  // Clean the content by removing image tags and URLs
-  const cleanContent = (content: string) => {
-    // Remove any lines that contain image URLs or src attributes
-    return content
+  // Process the article content to remove image tags and URLs
+  const processContent = (content: string): string => {
+    // Remove any lines with image URLs or HTML tags
+    const cleanedContent = content
       .split('\n')
-      .filter(line => !line.includes('src=') && !line.includes('https://storage.googleapis.com/gweb-uniblog-publish'))
+      .filter(line => {
+        const lowerLine = line.toLowerCase();
+        return !(
+          lowerLine.includes('src=') || 
+          lowerLine.includes('https://storage.googleapis.com/') || 
+          lowerLine.includes('<img') || 
+          lowerLine.includes('uniblog-publish') ||
+          lowerLine.startsWith('<img') ||
+          lowerLine.match(/^https?:\/\//)
+        );
+      })
       .join('\n');
+    
+    // Further clean any HTML tags and trim whitespace
+    return cleanedContent
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
+  // Get a clean version of the article content for display
+  const getCleanSummary = (article: Article): string => {
+    // If the summary contains image URLs, clean it
+    if (article.summary.includes('src=') || 
+        article.summary.includes('https://storage.googleapis.com/') ||
+        article.summary.includes('<img')) {
+      return "Read the full article for more details.";
+    }
+    return article.summary;
   };
 
   const toggleBookmark = async () => {
@@ -55,7 +82,7 @@ export function ArticleCard({ article }: ArticleCardProps) {
     if (navigator.share) {
       navigator.share({
         title: article.title,
-        text: article.summary,
+        text: getCleanSummary(article),
         url: article.url,
       }).catch((error) => console.error("Error sharing:", error))
     } else {
@@ -101,7 +128,7 @@ export function ArticleCard({ article }: ArticleCardProps) {
               {timeAgo(article.publishedAt)}
             </span>
           </div>
-          <p className="line-clamp-3 text-sm text-muted-foreground">{article.summary}</p>
+          <p className="line-clamp-3 text-sm text-muted-foreground">{getCleanSummary(article)}</p>
           <div className="flex flex-wrap gap-2 pt-2">
             {article.topics.map((topic) => (
               <Badge key={topic} variant="outline">
@@ -150,20 +177,22 @@ export function ArticleCard({ article }: ArticleCardProps) {
               </div>
             )}
             <div className="space-y-4">
-              <p className="text-lg font-medium">{article.summary}</p>
+              <p className="text-lg font-medium">{getCleanSummary(article)}</p>
               <div className="prose max-w-none dark:prose-invert">
-                {cleanContent(article.content)
-                  .replace(/<[^>]*>/g, ' ') // Remove HTML tags
+                {processContent(article.content)
                   .split(/\n+/) // Split by newlines
                   .map((paragraph, index) => {
                     const trimmed = paragraph.trim();
-                    // Skip paragraphs that look like image URLs or src attributes
-                    if (!trimmed || 
+                    if (!trimmed) return null;
+                    
+                    // Additional check to filter out any remaining URLs or image references
+                    if (trimmed.includes('http') || 
                         trimmed.includes('src=') || 
-                        trimmed.includes('https://storage.googleapis.com/gweb-uniblog-publish') ||
-                        trimmed.includes('<img')) {
+                        trimmed.includes('storage.googleapis.com') ||
+                        trimmed.match(/^<img/i)) {
                       return null;
                     }
+                    
                     return <p key={index}>{trimmed}</p>;
                   })
                   .filter(Boolean) // Remove empty paragraphs
