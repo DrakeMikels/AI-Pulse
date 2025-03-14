@@ -16,7 +16,7 @@ function getRedisClient() {
   if (redisClient) return redisClient;
   
   // Check if we have a Redis URL from Vercel
-  const redisUrl = process.env.STORAGE_REDIS_URL || process.env.REDIS_URL;
+  const redisUrl = process.env.REDIS_URL || "redis://default:7SXHj1HFOhuJz85v1xMTsdds0XpeIvKM@redis-15843.c90.us-east-1-3.ec2.redns.redis-cloud.com:15843";
   
   if (!redisUrl) {
     console.warn('Redis URL not found in environment variables');
@@ -25,7 +25,7 @@ function getRedisClient() {
   
   try {
     redisClient = new Redis(redisUrl);
-    console.log('Redis client initialized');
+    console.log('Redis client initialized with URL:', redisUrl);
     return redisClient;
   } catch (error) {
     console.error('Failed to initialize Redis client:', error);
