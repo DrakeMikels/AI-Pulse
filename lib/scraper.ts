@@ -3,8 +3,13 @@ import * as cheerio from 'cheerio';
 import { v4 as uuidv4 } from 'uuid';
 import { parseStringPromise } from 'xml2js';
 import type { Article } from '@/types/article';
+import fs from 'fs';
+import path from 'path';
 
-// In-memory storage for articles (will be reset on server restart)
+// File path for storing articles
+const ARTICLES_FILE_PATH = path.join(process.cwd(), 'data', 'articles.json');
+
+// In-memory cache for articles (will be reset on server restart)
 let cachedArticles: Article[] = [];
 
 // User agent rotation to avoid being blocked
@@ -20,8 +25,28 @@ function getRandomUserAgent() {
   return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 }
 
+// Define source types
+interface BaseSource {
+  url: string;
+  type: string;
+  base_url: string;
+}
+
+interface HtmlSource extends BaseSource {
+  type: "html";
+  selector: string;
+  title_selector: string;
+  link_selector: string;
+}
+
+interface RssSource extends BaseSource {
+  type: "rss";
+}
+
+type Source = HtmlSource | RssSource;
+
 // Sources to scrape
-const SOURCES = {
+const SOURCES: Record<string, Source> = {
   "AWS ML": {
     "url": "https://aws.amazon.com/blogs/machine-learning/",
     "type": "html",
@@ -30,37 +55,30 @@ const SOURCES = {
     "link_selector": "a",
     "base_url": "https://aws.amazon.com"
   },
-  "DeepMind": {
-    "url": "https://deepmind.google/discover/blog/",
-    "type": "html",
-    "selector": "article, .blog-card",
-    "title_selector": "h2, h3, .title",
-    "link_selector": "a",
-    "base_url": "https://deepmind.google"
+  "Wired AI": {
+    "url": "https://www.wired.com/feed/tag/ai/latest/rss",
+    "type": "rss",
+    "base_url": "https://www.wired.com"
   },
-  "OpenAI": {
-    "url": "https://openai.com/news/",
-    "type": "html",
-    "selector": "article, .post, .news-item",
-    "title_selector": "h2, h3, .title",
-    "link_selector": "a",
-    "base_url": "https://openai.com"
+  "AI Blog": {
+    "url": "https://www.artificial-intelligence.blog/ai-news?format=rss",
+    "type": "rss",
+    "base_url": "https://www.artificial-intelligence.blog"
   },
-  "Meta Research": {
-    "url": "https://research.facebook.com/",
-    "type": "html",
-    "selector": "article, .research-item, .blog-post",
-    "title_selector": "h2, h3, .title",
-    "link_selector": "a",
-    "base_url": "https://research.facebook.com"
+  "Google AI": {
+    "url": "https://blog.google/technology/ai/rss/",
+    "type": "rss",
+    "base_url": "https://blog.google"
   },
-  "Google Research": {
-    "url": "https://research.google/blog/",
-    "type": "html",
-    "selector": "article, .blog-card, .post-item",
-    "title_selector": "h2, h3, .title",
-    "link_selector": "a",
-    "base_url": "https://research.google"
+  "Anthropic": {
+    "url": "https://www.anthropic.com/feed.xml",
+    "type": "rss",
+    "base_url": "https://www.anthropic.com"
+  },
+  "Hugging Face": {
+    "url": "https://huggingface.co/blog/feed.xml",
+    "type": "rss",
+    "base_url": "https://huggingface.co"
   }
 };
 
@@ -288,16 +306,19 @@ export async function scrapeSources(): Promise<Article[]> {
           }
         }
       } else if (config.type === "html") {
+        // Type assertion to access HTML-specific properties
+        const htmlConfig = config as HtmlSource;
+        
         // Handle HTML page
         try {
           const headers = {
             'User-Agent': getRandomUserAgent(),
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.5',
-            'Referer': new URL(config.url).origin
+            'Referer': new URL(htmlConfig.url).origin
           };
           
-          const response = await axios.get(config.url, { 
+          const response = await axios.get(htmlConfig.url, { 
             headers,
             timeout: 15000, // 15 second timeout
             maxRedirects: 5
@@ -305,7 +326,7 @@ export async function scrapeSources(): Promise<Article[]> {
           const $ = cheerio.load(response.data);
           
           // Find all article elements
-          const articleElements = $(config.selector);
+          const articleElements = $(htmlConfig.selector);
           
           // Define the article type
           interface HtmlArticle {
@@ -317,8 +338,8 @@ export async function scrapeSources(): Promise<Article[]> {
           const articles: HtmlArticle[] = [];
           
           articleElements.each((_, element) => {
-            const titleElement = $(element).find(config.title_selector);
-            const linkElement = $(element).find(config.link_selector);
+            const titleElement = $(element).find(htmlConfig.title_selector);
+            const linkElement = $(element).find(htmlConfig.link_selector);
             
             if (titleElement.length && linkElement.length) {
               const title = titleElement.text().trim();
@@ -326,7 +347,7 @@ export async function scrapeSources(): Promise<Article[]> {
               
               // Handle relative URLs
               if (link && link.startsWith('/')) {
-                link = `${config.base_url}${link}`;
+                link = `${htmlConfig.base_url}${link}`;
               }
               
               if (title && link) {
@@ -371,7 +392,7 @@ export async function scrapeSources(): Promise<Article[]> {
             }
           }
         } catch (error) {
-          console.error(`Error scraping HTML source ${config.url}:`, error);
+          console.error(`Error scraping HTML source ${htmlConfig.url}:`, error);
         }
       }
     } catch (error) {
@@ -386,13 +407,23 @@ export async function scrapeSources(): Promise<Article[]> {
 }
 
 /**
- * Save articles to in-memory cache
+ * Save articles to file and in-memory cache
  */
 export function saveArticles(articles: Article[]): boolean {
   try {
-    // Store articles in memory
+    // Ensure data directory exists
+    const dataDir = path.dirname(ARTICLES_FILE_PATH);
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    
+    // Save to file
+    fs.writeFileSync(ARTICLES_FILE_PATH, JSON.stringify(articles, null, 2));
+    
+    // Also update in-memory cache
     cachedArticles = articles;
-    console.log(`Saved ${articles.length} articles to in-memory cache`);
+    
+    console.log(`Saved ${articles.length} articles to file and in-memory cache`);
     return true;
   } catch (error) {
     console.error("Error saving articles:", error);
@@ -401,17 +432,33 @@ export function saveArticles(articles: Article[]): boolean {
 }
 
 /**
- * Get articles from in-memory cache or generate fallback articles
+ * Get articles from in-memory cache, file, or generate fallback articles
  */
 export function getArticles(): Article[] {
-  // If we have cached articles, return them
+  // First try in-memory cache
   if (cachedArticles && cachedArticles.length > 0) {
     console.log(`Returning ${cachedArticles.length} articles from in-memory cache`);
     return cachedArticles;
   }
   
+  // Then try reading from file
+  try {
+    if (fs.existsSync(ARTICLES_FILE_PATH)) {
+      const fileContent = fs.readFileSync(ARTICLES_FILE_PATH, 'utf8');
+      const articles = JSON.parse(fileContent) as Article[];
+      
+      // Update in-memory cache
+      cachedArticles = articles;
+      
+      console.log(`Loaded ${articles.length} articles from file`);
+      return articles;
+    }
+  } catch (error) {
+    console.error("Error reading articles from file:", error);
+  }
+  
   // Otherwise, generate fallback articles
-  console.log("No articles in cache, generating fallback articles");
+  console.log("No articles in cache or file, generating fallback articles");
   return generateFallbackArticles();
 }
 
@@ -419,7 +466,7 @@ export function getArticles(): Article[] {
  * Generate fallback articles for when no real articles are available
  */
 function generateFallbackArticles(): Article[] {
-  const sources = ["AWS ML", "DeepMind", "OpenAI", "Meta Research", "Google Research"];
+  const sources = ["AWS ML", "Wired AI", "AI Blog", "Google AI", "Anthropic", "Hugging Face"];
   const topics = ["LLM", "Computer Vision", "AI Safety", "Multimodal AI", "Research", "Technology"];
   
   return Array.from({ length: 10 }, (_, i) => ({
