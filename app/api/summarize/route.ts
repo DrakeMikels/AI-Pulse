@@ -4,6 +4,9 @@ import { generateText } from 'ai';
 
 export async function POST(request: Request) {
   try {
+    // Debug: Log available environment variables
+    console.log("Env Variables:", Object.keys(process.env));
+    
     // Get the article content from the request body
     const { content, title, url } = await request.json();
     
