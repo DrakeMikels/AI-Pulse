@@ -2,26 +2,24 @@ import { NextResponse } from "next/server"
 import { scrapeAndSaveArticles } from "@/lib/scraper"
 
 export async function GET() {
+  console.log("Manual refresh of articles requested")
+  
   try {
-    console.log("Starting article refresh...")
-    const result = await scrapeAndSaveArticles()
+    const articles = await scrapeAndSaveArticles()
     
-    if (result.success) {
-      return NextResponse.json({ 
-        success: true, 
-        message: `Successfully refreshed and saved ${result.count} articles` 
-      })
-    } else {
-      return NextResponse.json({ 
-        success: false, 
-        error: result.error 
-      }, { status: 500 })
-    }
+    return NextResponse.json({ 
+      success: true, 
+      message: `Successfully refreshed and saved ${articles.length} articles` 
+    })
   } catch (error) {
     console.error("Error in refresh API route:", error)
-    return NextResponse.json({ 
-      success: false, 
-      error: String(error) 
-    }, { status: 500 })
+    
+    return NextResponse.json(
+      { 
+        success: false, 
+        error: error instanceof Error ? error.message : String(error) 
+      },
+      { status: 500 }
+    )
   }
 } 

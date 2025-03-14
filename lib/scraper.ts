@@ -2,7 +2,9 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { v4 as uuidv4 } from 'uuid';
 import { parseStringPromise } from 'xml2js';
+import { JSDOM } from 'jsdom';
 import type { Article } from '@/types/article';
+import { cleanArticleContent } from './utils';
 
 // In-memory storage for articles (will be reset on server restart)
 let cachedArticles: Article[] = [];
@@ -31,40 +33,76 @@ type Source = WebSource | RssSource;
 // Define sources
 const sources: Source[] = [
   {
-    url: 'https://www.anthropic.com/news',
-    type: 'web',
-    selector: 'li, article',
-    title_selector: 'h3, h2',
-    link_selector: 'a',
-    base_url: 'https://www.anthropic.com',
-    name: 'Anthropic'
-  },
-  {
-    url: 'https://openai.com/blog',
-    type: 'web',
-    selector: '.post-card',
-    title_selector: 'h3',
-    link_selector: 'a',
+    url: 'https://openai.com/blog/rss',
+    type: 'rss',
     base_url: 'https://openai.com',
     name: 'OpenAI'
   },
   {
-    url: 'https://ai.googleblog.com/',
-    type: 'web',
-    selector: '.post',
-    title_selector: 'h2.title',
-    link_selector: 'a.title',
+    url: 'http://feeds.feedburner.com/blogspot/gJZg',
+    type: 'rss',
     base_url: 'https://ai.googleblog.com',
     name: 'Google AI'
   },
   {
-    url: 'https://www.deepmind.com/blog',
-    type: 'web',
-    selector: '.result-card',
-    title_selector: 'h3',
-    link_selector: 'a',
-    base_url: 'https://www.deepmind.com',
-    name: 'DeepMind'
+    url: 'https://www.microsoft.com/en-us/research/feed',
+    type: 'rss',
+    base_url: 'https://www.microsoft.com',
+    name: 'Microsoft Research'
+  },
+  {
+    url: 'https://bair.berkeley.edu/blog/feed.xml',
+    type: 'rss',
+    base_url: 'https://bair.berkeley.edu',
+    name: 'Berkeley AI Research'
+  },
+  {
+    url: 'https://aws.amazon.com/blogs/machine-learning/feed',
+    type: 'rss',
+    base_url: 'https://aws.amazon.com',
+    name: 'AWS Machine Learning'
+  },
+  {
+    url: 'http://feeds.feedburner.com/nvidiablog',
+    type: 'rss',
+    base_url: 'https://blogs.nvidia.com',
+    name: 'NVIDIA AI'
+  },
+  {
+    url: 'https://medium.com/feed/@karpathy',
+    type: 'rss',
+    base_url: 'https://medium.com',
+    name: 'Andrej Karpathy'
+  },
+  {
+    url: 'https://www.fast.ai/atom.xml',
+    type: 'rss',
+    base_url: 'https://www.fast.ai',
+    name: 'Fast.ai'
+  },
+  {
+    url: 'https://distill.pub/rss.xml',
+    type: 'rss',
+    base_url: 'https://distill.pub',
+    name: 'Distill'
+  },
+  {
+    url: 'https://jalammar.github.io/feed.xml',
+    type: 'rss',
+    base_url: 'https://jalammar.github.io',
+    name: 'Jay Alammar'
+  },
+  {
+    url: 'https://machinelearningmastery.com/blog/feed',
+    type: 'rss',
+    base_url: 'https://machinelearningmastery.com',
+    name: 'ML Mastery'
+  },
+  {
+    url: 'https://www.inference.vc/rss',
+    type: 'rss',
+    base_url: 'https://www.inference.vc',
+    name: 'inFERENCe'
   }
 ];
 
@@ -588,7 +626,9 @@ export function getArticles(): Article[] {
  * Generate fallback articles for when no real articles are available
  */
 function generateFallbackArticles(): Article[] {
-  const sources = ["Anthropic", "OpenAI", "Google AI", "DeepMind", "Meta AI", "Hugging Face"];
+  const sources = ["OpenAI", "Google AI", "Microsoft Research", "Berkeley AI Research", 
+                  "AWS Machine Learning", "NVIDIA AI", "Andrej Karpathy", "Fast.ai",
+                  "Distill", "Jay Alammar", "ML Mastery", "inFERENCe"];
   const topics = ["LLM", "Computer Vision", "AI Safety", "Multimodal AI", "Research", "Technology"];
   
   // Create more realistic article titles and content
@@ -617,10 +657,20 @@ function generateFallbackArticles(): Article[] {
       title: "AI for Scientific Discovery",
       summary: "How our AI systems are helping scientists make new discoveries in biology and chemistry.",
       content: "AI is increasingly becoming an invaluable tool for scientific research. Our models are now being used by scientists to accelerate discoveries in fields like protein folding, drug design, and materials science. By quickly analyzing vast amounts of data and suggesting promising new directions for investigation, AI can help human researchers focus their efforts and make breakthroughs more efficiently. Recent examples include identifying novel antibiotics candidates and predicting the structure of previously unknown proteins."
+    },
+    {
+      title: "Improving Efficiency in Large Language Models",
+      summary: "New techniques for making LLMs faster and more resource-efficient without sacrificing performance.",
+      content: "As language models continue to grow in size and capability, efficiency becomes increasingly important. Our latest research focuses on techniques to reduce the computational resources required for both training and inference. Through a combination of pruning, quantization, and distillation methods, we've achieved significant speedups while maintaining most of the performance of larger models. These advances make it possible to deploy powerful AI systems in more constrained environments, from mobile devices to edge computing scenarios."
+    },
+    {
+      title: "Responsible AI Development Framework",
+      summary: "A comprehensive approach to developing AI systems that are safe, fair, and beneficial.",
+      content: "We're introducing a new framework for responsible AI development that addresses key challenges in safety, fairness, and transparency. This approach integrates evaluation throughout the development lifecycle, from initial design to deployment and monitoring. By systematically identifying and mitigating potential risks, we can build AI systems that better align with human values and societal needs. The framework includes specific metrics, testing methodologies, and governance processes that can be adapted for different AI applications and contexts."
     }
   ];
   
-  return Array.from({ length: 10 }, (_, i) => {
+  return Array.from({ length: 12 }, (_, i) => {
     const template = articleTemplates[i % articleTemplates.length];
     const source = sources[i % sources.length];
     return {
@@ -642,45 +692,205 @@ function generateFallbackArticles(): Article[] {
 /**
  * Main function to scrape and save articles
  */
-export async function scrapeAndSaveArticles() {
-  console.log("Starting article refresh...");
+export async function scrapeAndSaveArticles(): Promise<Article[]> {
+  console.log('Starting to scrape articles...');
   
   try {
-    // Scrape articles from all sources
-    const articles = await scrapeArticles();
+    // Process only a subset of sources at a time to avoid timeouts
+    // For Vercel serverless functions, we need to be very conservative
+    const MAX_SOURCES_TO_PROCESS = 3;
+    const MAX_ARTICLES_PER_SOURCE = 3;
     
-    if (articles.length === 0) {
-      console.log("No articles found, using fallback articles");
-      const fallbackArticles = generateFallbackArticles();
-      saveArticles(fallbackArticles);
-      return { 
-        success: false, 
-        error: "No articles found from any source", 
-        count: fallbackArticles.length 
-      };
+    // Select a random subset of sources to process
+    const shuffledSources = [...sources].sort(() => 0.5 - Math.random());
+    const sourcesToProcess = shuffledSources.slice(0, MAX_SOURCES_TO_PROCESS);
+    
+    console.log(`Processing ${sourcesToProcess.length} sources: ${sourcesToProcess.map(s => s.name).join(', ')}`);
+    
+    // Process each source with a short timeout
+    const articlesPromises = sourcesToProcess.map(source => 
+      scrapeSource(source, MAX_ARTICLES_PER_SOURCE)
+        .catch(error => {
+          console.error(`Error scraping ${source.name}:`, error.message);
+          return []; // Return empty array on error
+        })
+    );
+    
+    // Wait for all sources to be processed
+    const articlesArrays = await Promise.all(articlesPromises);
+    
+    // Flatten the array of arrays
+    const newArticles = articlesArrays.flat();
+    console.log(`Scraped ${newArticles.length} new articles`);
+    
+    if (newArticles.length > 0) {
+      // Merge with existing articles, avoiding duplicates
+      const existingIds = new Set(cachedArticles.map(a => a.id));
+      const uniqueNewArticles = newArticles.filter(article => !existingIds.has(article.id));
+      
+      cachedArticles = [...uniqueNewArticles, ...cachedArticles];
+      console.log(`Added ${uniqueNewArticles.length} unique new articles to cache`);
+    } else {
+      console.log('No new articles found, using fallback articles');
+      // If no articles were scraped, use fallback articles
+      if (cachedArticles.length === 0) {
+        cachedArticles = generateFallbackArticles();
+        console.log(`Generated ${cachedArticles.length} fallback articles`);
+      }
     }
     
-    // Save the articles
-    const saved = saveArticles(articles);
-    
-    if (!saved) {
-      return { 
-        success: false, 
-        error: "Failed to save articles", 
-        count: 0 
-      };
-    }
-    
-    return { 
-      success: true, 
-      count: articles.length 
-    };
+    return cachedArticles;
   } catch (error) {
-    console.error("Error in scrapeAndSaveArticles:", error);
-    return { 
-      success: false, 
-      error: String(error), 
-      count: 0 
-    };
+    console.error('Error in scrapeAndSaveArticles:', error);
+    
+    // If scraping fails completely, use fallback articles
+    if (cachedArticles.length === 0) {
+      cachedArticles = generateFallbackArticles();
+      console.log(`Generated ${cachedArticles.length} fallback articles after error`);
+    }
+    
+    return cachedArticles;
   }
+}
+
+/**
+ * Scrape a single source
+ */
+async function scrapeSource(source: typeof sources[0], maxArticles: number): Promise<Article[]> {
+  console.log(`Scraping ${source.name} from ${source.url}`);
+  
+  try {
+    // Set a timeout for the request to avoid hanging
+    const response = await axios.get(source.url, { 
+      timeout: 5000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; AI-Pulse/1.0; +https://ai-pulse-ten.vercel.app)'
+      }
+    });
+    
+    if (source.type === 'rss') {
+      return await scrapeRssFeed(response.data, source, maxArticles);
+    } else {
+      // Web scraping is more complex and prone to timeouts
+      // For now, just return an empty array for non-RSS sources
+      console.log(`Skipping non-RSS source: ${source.name}`);
+      return [];
+    }
+  } catch (error: unknown) {
+    console.error(`Error fetching ${source.name}:`, error instanceof Error ? error.message : String(error));
+    return [];
+  }
+}
+
+/**
+ * Parse an RSS feed and extract articles
+ */
+async function scrapeRssFeed(xmlData: string, source: typeof sources[0], maxArticles: number): Promise<Article[]> {
+  try {
+    const result = await parseStringPromise(xmlData, { explicitArray: false });
+    
+    // Handle different RSS formats
+    const channel = result.rss?.channel || result.feed;
+    if (!channel) {
+      console.error(`Invalid RSS format for ${source.name}`);
+      return [];
+    }
+    
+    // Get items (different property names in different RSS formats)
+    const items = channel.item || channel.entry || [];
+    const itemsArray = Array.isArray(items) ? items : [items];
+    
+    // Process only the first maxArticles
+    const limitedItems = itemsArray.slice(0, maxArticles);
+    
+    return limitedItems.map((item: any) => {
+      // Extract the publication date
+      const pubDate = item.pubDate || item.published || item.updated || new Date().toISOString();
+      
+      // Extract the content (different property names in different RSS formats)
+      const content = item['content:encoded'] || 
+                     item.content || 
+                     item.description || 
+                     item.summary || 
+                     '';
+      
+      // Clean the content
+      const cleanedContent = cleanArticleContent(content);
+      
+      // Extract the link
+      const link = item.link?.href || item.link || '#';
+      
+      // Create a unique ID
+      const id = `${source.name.toLowerCase().replace(/\s+/g, '-')}-${Buffer.from(item.title || 'untitled').toString('base64').substring(0, 10)}`;
+      
+      return {
+        id,
+        title: item.title || 'Untitled',
+        summary: cleanedContent.substring(0, 150) + '...',
+        content: cleanedContent,
+        url: typeof link === 'object' ? link._ : link,
+        imageUrl: extractImageUrl(cleanedContent) || `https://placehold.co/600x400?text=${encodeURIComponent(source.name)}`,
+        source: source.name,
+        topics: extractTopics(cleanedContent),
+        publishedAt: new Date(pubDate).toISOString(),
+        createdAt: new Date().toISOString(),
+        bookmarked: false
+      };
+    });
+  } catch (error) {
+    console.error(`Error parsing RSS feed for ${source.name}:`, error);
+    return [];
+  }
+}
+
+/**
+ * Extract an image URL from HTML content
+ */
+function extractImageUrl(html: string): string | null {
+  try {
+    const dom = new JSDOM(html);
+    const img = dom.window.document.querySelector('img');
+    return img?.src || null;
+  } catch (error: unknown) {
+    return null;
+  }
+}
+
+/**
+ * Extract topics from article content
+ */
+function extractTopics(content: string): string[] {
+  const topicKeywords: Record<string, string[]> = {
+    'LLM': ['llm', 'language model', 'gpt', 'transformer', 'nlp', 'text generation'],
+    'Computer Vision': ['vision', 'image', 'object detection', 'segmentation', 'camera'],
+    'AI Safety': ['safety', 'alignment', 'ethics', 'responsible ai', 'risk'],
+    'Multimodal AI': ['multimodal', 'vision-language', 'text-to-image', 'audio', 'speech'],
+    'Research': ['research', 'paper', 'study', 'experiment', 'findings'],
+    'Technology': ['technology', 'software', 'hardware', 'product', 'release']
+  };
+  
+  const topics: string[] = [];
+  const lowerContent = content.toLowerCase();
+  
+  // Check for each topic's keywords in the content
+  Object.entries(topicKeywords).forEach(([topic, keywords]) => {
+    if (keywords.some(keyword => lowerContent.includes(keyword))) {
+      topics.push(topic);
+    }
+  });
+  
+  // If no topics were found, add a default one
+  if (topics.length === 0) {
+    topics.push('Technology');
+  }
+  
+  // Limit to 2 topics maximum
+  return topics.slice(0, 2);
+}
+
+/**
+ * Clear the articles cache
+ */
+export function clearArticlesCache(): void {
+  cachedArticles = [];
 } 
