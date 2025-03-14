@@ -58,7 +58,7 @@ export async function POST(request: Request) {
       'Authorization': `Bearer ${apiKey}`
     };
     const body = {
-      "model": "pplx-7b-online",
+      "model": "sonar",
       "stream": false,
       "max_tokens": 1024,
       "frequency_penalty": 1,
