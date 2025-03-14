@@ -79,27 +79,31 @@ interface RssArticleItem {
 
 // Helper function to get a proxied URL to avoid CORS issues
 function getProxiedUrl(url: string): string {
-  // Try multiple proxy services for better reliability
   // Using allorigins.win which is more reliable than corsproxy.io
   return `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
 }
 
-// Helper function to retry failed requests
-async function fetchWithRetry(url: string, options: any, maxRetries = 3): Promise<any> {
+// Helper function to retry failed requests with shorter timeouts
+async function fetchWithRetry(url: string, options: any, maxRetries = 2): Promise<any> {
   let lastError;
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`Attempt ${attempt}/${maxRetries} for ${url}`);
-      const response = await axios(url, options);
+      // Set a shorter timeout for Vercel serverless functions
+      const opts = {
+        ...options,
+        timeout: 5000 // 5 second timeout
+      };
+      const response = await axios(url, opts);
       return response;
     } catch (error: any) {
       console.error(`Attempt ${attempt} failed for ${url}: ${error.message}`);
       lastError = error;
       
-      // Wait before retrying (exponential backoff)
+      // Wait before retrying (shorter delay for serverless)
       if (attempt < maxRetries) {
-        const delay = Math.pow(2, attempt) * 1000;
+        const delay = 1000; // 1 second delay
         console.log(`Waiting ${delay}ms before retry...`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
@@ -353,7 +357,11 @@ async function scrapeArticles(): Promise<Article[]> {
     const allArticles: Article[] = [];
     console.log(`Starting to scrape ${sources.length} sources...`);
 
-    for (const source of sources) {
+    // Process only 2 sources at a time to avoid timeouts
+    const sourcesToProcess = sources.slice(0, 2);
+    console.log(`Processing ${sourcesToProcess.length} sources in this run...`);
+
+    for (const source of sourcesToProcess) {
       try {
         console.log(`Attempting to scrape source: ${source.url} (type: ${source.type})`);
         let sourceArticles: Article[] = [];
@@ -373,12 +381,11 @@ async function scrapeArticles(): Promise<Article[]> {
             
             const response = await fetchWithRetry(proxiedUrl, { 
               headers,
-              timeout: 15000,
               method: 'GET',
               validateStatus: (status: number) => true // Accept any status code to log it
             });
             
-            console.log(`Response from ${source.url}: status=${response.status}, content-type=${response.headers['content-type']}`);
+            console.log(`Response from ${source.url}: status=${response.status}`);
             
             if (response.status !== 200) {
               console.error(`Error status code ${response.status} from ${source.url}`);
@@ -390,7 +397,9 @@ async function scrapeArticles(): Promise<Article[]> {
             const elements = $(source.selector);
             console.log(`Found ${elements.length} elements matching selector`);
             
+            // Process only the first 3 articles to avoid timeouts
             sourceArticles = $(source.selector)
+              .slice(0, 3)
               .map((_, el) => {
                 const title = $(el).find(source.title_selector).text().trim();
                 const link = $(el).find(source.link_selector).attr('href');
@@ -417,12 +426,7 @@ async function scrapeArticles(): Promise<Article[]> {
               
             console.log(`Filtered to ${sourceArticles.length} valid articles`);
           } catch (webError: any) {
-            console.error(`Error making web request to ${source.url}:`, webError);
-            console.error(`Error details: ${webError.message}`);
-            if (webError.response) {
-              console.error(`Response status: ${webError.response.status}`);
-              console.error(`Response headers:`, webError.response.headers);
-            }
+            console.error(`Error making web request to ${source.url}:`, webError.message);
             continue;
           }
         } else if (source.type === 'rss') {
@@ -439,90 +443,91 @@ async function scrapeArticles(): Promise<Article[]> {
             
             const response = await fetchWithRetry(proxiedUrl, { 
               headers,
-              timeout: 15000,
               method: 'GET',
               validateStatus: (status: number) => true
             });
             
-            console.log(`RSS response from ${source.url}: status=${response.status}, content-type=${response.headers['content-type']}`);
+            console.log(`RSS response from ${source.url}: status=${response.status}`);
             
             if (response.status !== 200) {
               console.error(`Error status code ${response.status} from RSS ${source.url}`);
               continue;
             }
             
-            // Handle RSS feed
-            const rssArticles = await scrapeRss(source.url, source.name);
-            console.log(`Found ${rssArticles.length} articles in RSS feed`);
-            
-            for (const rssArticle of rssArticles) {
-              try {
-                const title = rssArticle.title;
-                const link = rssArticle.link;
-                
-                if (!title || !link) continue;
-                
-                // Get additional article details
-                const articleDetails = await scrapeArticle(link);
-                
-                // Combine content from RSS and article page
-                const fullContent = rssArticle.content || rssArticle.description || articleDetails.content;
-                
-                // Generate summary and extract topics
-                const summary = generateSimpleSummary(fullContent, title);
-                const topics = extractSimpleTopics(fullContent, title);
-                
-                // Create article object with all required properties
-                const article: Article = {
-                  id: uuidv4(),
-                  title,
-                  summary,
-                  content: fullContent,
-                  url: link,
-                  imageUrl: articleDetails.imageUrl || `/placeholder.svg?height=200&width=400&text=${encodeURIComponent(source.name)}`,
-                  source: source.name,
-                  topics,
-                  publishedAt: new Date().toISOString(),
-                  createdAt: new Date().toISOString(),
-                  bookmarked: false
-                };
-                
-                sourceArticles.push(article);
-              } catch (error) {
-                console.error(`Error processing RSS article:`, error);
+            try {
+              // Parse the XML
+              const result = await parseStringPromise(response.data);
+              
+              // Find all items (articles)
+              const items = result.rss?.channel?.[0]?.item || [];
+              console.log(`Found ${items.length} items in RSS feed`);
+              
+              // Process only the first 2 items to avoid timeouts
+              const limitedItems = items.slice(0, 2);
+              
+              for (const item of limitedItems) {
+                try {
+                  const title = item.title?.[0] || "";
+                  const link = item.link?.[0] || "";
+                  const description = item.description?.[0] || "";
+                  
+                  if (!title || !link) continue;
+                  
+                  // Skip detailed article scraping to avoid timeouts
+                  // Use the description from the RSS feed directly
+                  const summary = description ? 
+                    (description.length > 150 ? description.substring(0, 147) + '...' : description) : 
+                    `This is an article about ${title} from ${source.name}.`;
+                  
+                  const topics = extractSimpleTopics(title + ' ' + description, title);
+                  
+                  // Create article object with minimal processing
+                  const article: Article = {
+                    id: uuidv4(),
+                    title,
+                    summary,
+                    content: description || `Visit the original article at ${link} to read the full content.`,
+                    url: link,
+                    imageUrl: `/placeholder.svg?height=200&width=400&text=${encodeURIComponent(source.name)}`,
+                    source: source.name,
+                    topics,
+                    publishedAt: new Date().toISOString(),
+                    createdAt: new Date().toISOString(),
+                    bookmarked: false
+                  };
+                  
+                  sourceArticles.push(article);
+                  console.log(`Successfully processed RSS article: ${title}`);
+                } catch (error) {
+                  console.error(`Error processing RSS item:`, error);
+                }
               }
+            } catch (parseError) {
+              console.error(`Error parsing RSS feed:`, parseError);
             }
           } catch (rssError: any) {
-            console.error(`Error making RSS request to ${source.url}:`, rssError);
-            console.error(`Error details: ${rssError.message}`);
-            if (rssError.response) {
-              console.error(`Response status: ${rssError.response.status}`);
-              console.error(`Response headers:`, rssError.response.headers);
-            }
+            console.error(`Error making RSS request to ${source.url}:`, rssError.message);
             continue;
           }
         }
 
-        // Process the first 5 articles
-        console.log(`Processing up to 5 articles from source ${source.url}`);
-        for (const article of sourceArticles.slice(0, 5)) {
+        // Process only 2 articles per source to avoid timeouts
+        console.log(`Processing up to 2 articles from source ${source.url}`);
+        for (const article of sourceArticles.slice(0, 2)) {
           try {
-            // Get additional article details
-            console.log(`Scraping article details from ${article.url}`);
-            const articleDetails = await scrapeArticle(article.url);
+            // Skip detailed article scraping to avoid timeouts
+            // Instead, use the title and basic info we already have
+            const summary = `This is an article about ${article.title} from ${source.name}.`;
+            const topics = extractSimpleTopics(article.title, article.title);
             
-            // Generate summary and extract topics
-            const summary = generateSimpleSummary(articleDetails.content, article.title);
-            const topics = extractSimpleTopics(articleDetails.content, article.title);
-            
-            // Create article object
+            // Create article object with minimal processing
             const articleObj: Article = {
               id: uuidv4(),
               title: article.title,
               summary,
-              content: articleDetails.content,
+              content: `Visit the original article at ${article.url} to read the full content.`,
               url: article.url,
-              imageUrl: articleDetails.imageUrl || `/placeholder.svg?height=200&width=400&text=${encodeURIComponent(source.name)}`,
+              imageUrl: `/placeholder.svg?height=200&width=400&text=${encodeURIComponent(source.name)}`,
               source: article.source,
               topics,
               publishedAt: article.publishedAt,
