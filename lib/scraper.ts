@@ -38,22 +38,28 @@ const sources: Source[] = [
     base_url: 'https://www.anthropic.com'
   },
   {
-    url: 'https://blog.google/technology/ai/',
+    url: 'https://ai.googleblog.com/',
     type: 'web',
-    selector: 'article',
-    title_selector: 'h3, h2',
+    selector: '.post',
+    title_selector: 'h2.title',
+    link_selector: 'a.title',
+    base_url: 'https://ai.googleblog.com'
+  },
+  {
+    url: 'https://news.mit.edu/topic/artificial-intelligence2',
+    type: 'web',
+    selector: '.article-item',
+    title_selector: 'h3',
     link_selector: 'a',
-    base_url: 'https://blog.google'
+    base_url: 'https://news.mit.edu'
   },
   {
-    url: 'https://www.wired.com/feed/tag/ai/latest/rss',
-    type: 'rss',
-    base_url: 'https://www.wired.com'
-  },
-  {
-    url: 'https://www.artificial-intelligence.blog/ai-news?format=rss',
-    type: 'rss',
-    base_url: 'https://www.artificial-intelligence.blog'
+    url: 'https://www.theverge.com/ai-artificial-intelligence',
+    type: 'web',
+    selector: '.duet--content-cards--content-card',
+    title_selector: 'h2',
+    link_selector: 'a',
+    base_url: ''
   }
 ];
 
@@ -68,8 +74,34 @@ interface RssArticleItem {
 
 // Helper function to get a proxied URL to avoid CORS issues
 function getProxiedUrl(url: string): string {
-  // Use corsproxy.io as a CORS proxy
-  return `https://corsproxy.io/?${encodeURIComponent(url)}`;
+  // Try multiple proxy services for better reliability
+  // Using allorigins.win which is more reliable than corsproxy.io
+  return `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+}
+
+// Helper function to retry failed requests
+async function fetchWithRetry(url: string, options: any, maxRetries = 3): Promise<any> {
+  let lastError;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`Attempt ${attempt}/${maxRetries} for ${url}`);
+      const response = await axios(url, options);
+      return response;
+    } catch (error: any) {
+      console.error(`Attempt ${attempt} failed for ${url}: ${error.message}`);
+      lastError = error;
+      
+      // Wait before retrying (exponential backoff)
+      if (attempt < maxRetries) {
+        const delay = Math.pow(2, attempt) * 1000;
+        console.log(`Waiting ${delay}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  
+  throw lastError;
 }
 
 /**
@@ -85,7 +117,12 @@ async function scrapeRss(url: string, sourceName: string): Promise<RssArticleIte
     const proxiedUrl = getProxiedUrl(url);
     console.log(`Making proxied RSS request to ${proxiedUrl}...`);
     
-    const response = await axios.get(proxiedUrl, { headers });
+    const response = await fetchWithRetry(proxiedUrl, { 
+      headers,
+      timeout: 15000,
+      method: 'GET'
+    });
+    
     console.log(`RSS feed status code: ${response.status}`);
     
     // Parse the XML
@@ -143,7 +180,12 @@ async function scrapeArticle(url: string) {
     const proxiedUrl = getProxiedUrl(url);
     console.log(`Making proxied article request to ${proxiedUrl}...`);
     
-    const response = await axios.get(proxiedUrl, { headers });
+    const response = await fetchWithRetry(proxiedUrl, { 
+      headers,
+      timeout: 15000,
+      method: 'GET'
+    });
+    
     const $ = cheerio.load(response.data);
     
     // Extract article content
@@ -324,10 +366,11 @@ async function scrapeArticles(): Promise<Article[]> {
             const proxiedUrl = getProxiedUrl(source.url);
             console.log(`Making proxied web request to ${proxiedUrl}...`);
             
-            const response = await axios.get(proxiedUrl, { 
+            const response = await fetchWithRetry(proxiedUrl, { 
               headers,
-              timeout: 10000, // 10 second timeout
-              validateStatus: (status) => true // Accept any status code to log it
+              timeout: 15000,
+              method: 'GET',
+              validateStatus: (status: number) => true // Accept any status code to log it
             });
             
             console.log(`Response from ${source.url}: status=${response.status}, content-type=${response.headers['content-type']}`);
@@ -389,10 +432,11 @@ async function scrapeArticles(): Promise<Article[]> {
             const proxiedUrl = getProxiedUrl(source.url);
             console.log(`Making proxied RSS request to ${proxiedUrl}...`);
             
-            const response = await axios.get(proxiedUrl, { 
+            const response = await fetchWithRetry(proxiedUrl, { 
               headers,
-              timeout: 10000,
-              validateStatus: (status) => true
+              timeout: 15000,
+              method: 'GET',
+              validateStatus: (status: number) => true
             });
             
             console.log(`RSS response from ${source.url}: status=${response.status}, content-type=${response.headers['content-type']}`);
