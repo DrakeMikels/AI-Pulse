@@ -11,8 +11,8 @@ export async function GET(request: NextRequest) {
   const timeframe = searchParams.get("timeframe")
   const bookmarked = searchParams.get("bookmarked")
 
-  // Get articles from in-memory storage
-  const articles = getArticles()
+  // Get articles from storage (now async with Redis)
+  const articles = await getArticles()
   let filteredArticles = [...articles]
 
   // Apply search query filter

@@ -3,11 +3,35 @@ import * as cheerio from 'cheerio';
 import { v4 as uuidv4 } from 'uuid';
 import { parseStringPromise } from 'xml2js';
 import type { Article } from '@/types/article';
-import fs from 'fs';
-import path from 'path';
+import Redis from 'ioredis';
 
-// File path for storing articles
-const ARTICLES_FILE_PATH = path.join(process.cwd(), 'data', 'articles.json');
+// Redis client initialization
+let redisClient: Redis | null = null;
+
+// Redis key for storing articles
+const ARTICLES_REDIS_KEY = 'articles';
+
+// Initialize Redis client
+function getRedisClient() {
+  if (redisClient) return redisClient;
+  
+  // Check if we have a Redis URL from Vercel
+  const redisUrl = process.env.STORAGE_REDIS_URL || process.env.REDIS_URL;
+  
+  if (!redisUrl) {
+    console.warn('Redis URL not found in environment variables');
+    return null;
+  }
+  
+  try {
+    redisClient = new Redis(redisUrl);
+    console.log('Redis client initialized');
+    return redisClient;
+  } catch (error) {
+    console.error('Failed to initialize Redis client:', error);
+    return null;
+  }
+}
 
 // In-memory cache for articles (will be reset on server restart)
 let cachedArticles: Article[] = [];
@@ -407,24 +431,23 @@ export async function scrapeSources(): Promise<Article[]> {
 }
 
 /**
- * Save articles to file and in-memory cache
+ * Save articles to Redis and in-memory cache
  */
-export function saveArticles(articles: Article[]): boolean {
+export async function saveArticles(articles: Article[]): Promise<boolean> {
   try {
-    // Ensure data directory exists
-    const dataDir = path.dirname(ARTICLES_FILE_PATH);
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true });
-    }
-    
-    // Save to file
-    fs.writeFileSync(ARTICLES_FILE_PATH, JSON.stringify(articles, null, 2));
-    
-    // Also update in-memory cache
+    // Update in-memory cache
     cachedArticles = articles;
     
-    console.log(`Saved ${articles.length} articles to file and in-memory cache`);
-    return true;
+    // Save to Redis if available
+    const redis = getRedisClient();
+    if (redis) {
+      await redis.set(ARTICLES_REDIS_KEY, JSON.stringify(articles));
+      console.log(`Saved ${articles.length} articles to Redis and in-memory cache`);
+      return true;
+    } else {
+      console.warn('Redis client not available, articles saved only to in-memory cache');
+      return true; // Still return true as we saved to in-memory cache
+    }
   } catch (error) {
     console.error("Error saving articles:", error);
     return false;
@@ -432,33 +455,37 @@ export function saveArticles(articles: Article[]): boolean {
 }
 
 /**
- * Get articles from in-memory cache, file, or generate fallback articles
+ * Get articles from in-memory cache, Redis, or generate fallback articles
  */
-export function getArticles(): Article[] {
+export async function getArticles(): Promise<Article[]> {
   // First try in-memory cache
   if (cachedArticles && cachedArticles.length > 0) {
     console.log(`Returning ${cachedArticles.length} articles from in-memory cache`);
     return cachedArticles;
   }
   
-  // Then try reading from file
+  // Then try reading from Redis
   try {
-    if (fs.existsSync(ARTICLES_FILE_PATH)) {
-      const fileContent = fs.readFileSync(ARTICLES_FILE_PATH, 'utf8');
-      const articles = JSON.parse(fileContent) as Article[];
+    const redis = getRedisClient();
+    if (redis) {
+      const articlesJson = await redis.get(ARTICLES_REDIS_KEY);
       
-      // Update in-memory cache
-      cachedArticles = articles;
-      
-      console.log(`Loaded ${articles.length} articles from file`);
-      return articles;
+      if (articlesJson) {
+        const articles = JSON.parse(articlesJson) as Article[];
+        
+        // Update in-memory cache
+        cachedArticles = articles;
+        
+        console.log(`Loaded ${articles.length} articles from Redis`);
+        return articles;
+      }
     }
   } catch (error) {
-    console.error("Error reading articles from file:", error);
+    console.error("Error reading articles from Redis:", error);
   }
   
   // Otherwise, generate fallback articles
-  console.log("No articles in cache or file, generating fallback articles");
+  console.log("No articles in cache or Redis, generating fallback articles");
   return generateFallbackArticles();
 }
 
@@ -496,7 +523,7 @@ export async function scrapeAndSaveArticles() {
     if (articles.length === 0) {
       console.log("No articles found, using fallback articles");
       const fallbackArticles = generateFallbackArticles();
-      saveArticles(fallbackArticles);
+      await saveArticles(fallbackArticles);
       return { 
         success: false, 
         error: "No articles found from any source", 
@@ -505,7 +532,7 @@ export async function scrapeAndSaveArticles() {
     }
     
     // Save the articles
-    const saved = saveArticles(articles);
+    const saved = await saveArticles(articles);
     
     if (!saved) {
       return { 
