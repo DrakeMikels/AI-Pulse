@@ -6,9 +6,7 @@
   "outputDirectory": ".next",
   "regions": ["iad1"],
   "env": {
-    "OPENAI_API_KEY": "${OPENAI_API_KEY}",
-    "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}",
-    "BRAVE_API_KEY": "${BRAVE_API_KEY}"
+    "ANTHROPIC_API_KEY": "@anthropic_api_key"
   },
   "crons": [
     {
