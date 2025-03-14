@@ -14,12 +14,13 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar"
+import { Logo } from "@/components/logo"
 
 export function DashboardSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="flex items-center justify-center py-4">
-        <h2 className="text-xl font-bold">AI Pulse</h2>
+        <Logo size="md" />
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>

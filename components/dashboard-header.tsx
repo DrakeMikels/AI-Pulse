@@ -7,6 +7,7 @@ import { useTheme } from "next-themes"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Input } from "@/components/ui/input"
 import { useState, useEffect } from "react"
+import { Logo } from "@/components/logo"
 
 export function DashboardHeader() {
   const { setTheme, theme } = useTheme()
@@ -25,7 +26,7 @@ export function DashboardHeader() {
         </div>
         <div className="flex items-center gap-2">
           <Link href="/" className="flex items-center gap-2">
-            <span className="text-xl font-bold">AI Pulse</span>
+            <Logo size="md" />
           </Link>
         </div>
         <div className="ml-auto flex items-center gap-2">
