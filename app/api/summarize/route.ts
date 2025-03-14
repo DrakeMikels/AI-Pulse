@@ -1,6 +1,4 @@
 import { NextResponse } from 'next/server';
-import { anthropic } from '@ai-sdk/anthropic';
-import { generateText } from 'ai';
 
 export async function POST(request: Request) {
   try {
@@ -17,10 +15,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check for API key
-    const apiKey = process.env.anthropic_api_key;
+    // Check for Perplexity API key
+    const apiKey = process.env.PERPLEXITY_API_KEY;
     if (!apiKey) {
-      console.error('anthropic_api_key is not set');
+      console.error('PERPLEXITY_API_KEY is not set');
       return NextResponse.json(
         { error: 'API key not configured' },
         { status: 500 }
@@ -28,10 +26,10 @@ export async function POST(request: Request) {
     }
 
     // Log the API key format (first few characters)
-    console.log('Using API key starting with:', apiKey.substring(0, 5) + '...');
+    console.log('Using Perplexity API key starting with:', apiKey.substring(0, 5) + '...');
     console.log('API key length:', apiKey.length);
 
-    // Create the prompt for Claude
+    // Create the prompt for Perplexity
     const prompt = `
     I need a concise summary of the following article titled "${title}".
     
@@ -50,20 +48,54 @@ export async function POST(request: Request) {
     Format your response using markdown with clear headings and bullet points. Keep the summary concise and focused on the most important information.
     `;
 
-    // Call Claude API using Vercel AI SDK with default provider
-    console.log('Calling Claude API for article summarization via Vercel AI SDK...');
+    // Call Perplexity API
+    console.log('Calling Perplexity API for article summarization...');
     
-    const { text } = await generateText({
-      model: anthropic('claude-3-5-sonnet-20240620'),
-      prompt: prompt,
-      maxTokens: 1000,
+    const perplexityUrl = 'https://api.perplexity.ai/chat/completions';
+    const headers = {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    };
+    const body = {
+      "model": "pplx-7b-online",
+      "stream": false,
+      "max_tokens": 1024,
+      "frequency_penalty": 1,
+      "temperature": 0.0,
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful assistant that summarizes articles. Be precise and concise in your responses."
+        },
+        {
+          "role": "user",
+          "content": prompt
+        }
+      ]
+    };
+
+    const response = await fetch(perplexityUrl, {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify(body)
     });
 
-    console.log('Successfully generated summary with Claude via Vercel AI SDK');
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Perplexity API error:', errorText);
+      throw new Error(`Perplexity API returned ${response.status}: ${errorText}`);
+    }
+
+    const data = await response.json();
+    console.log('Successfully generated summary with Perplexity');
     
-    return NextResponse.json({ summary: text });
+    // Extract the summary from Perplexity's response
+    const summary = data.choices[0].message.content;
+    
+    return NextResponse.json({ summary });
   } catch (error) {
-    console.error('Error summarizing article with Claude:', error);
+    console.error('Error summarizing article with Perplexity:', error);
     return NextResponse.json(
       { error: 'Failed to summarize article' },
       { status: 500 }

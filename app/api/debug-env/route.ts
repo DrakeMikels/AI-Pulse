@@ -8,6 +8,7 @@ export async function GET() {
     // Check for specific environment variables
     const hasAnthropicApiKey = !!process.env.ANTHROPIC_API_KEY;
     const hasLowercaseAnthropicApiKey = !!process.env.anthropic_api_key;
+    const hasPerplexityApiKey = !!process.env.PERPLEXITY_API_KEY;
     
     // Get first few characters of API keys if they exist
     let anthropicApiKeyPrefix = null;
@@ -20,14 +21,21 @@ export async function GET() {
       lowercaseAnthropicApiKeyPrefix = process.env.anthropic_api_key.substring(0, 5) + '...';
     }
     
+    let perplexityApiKeyPrefix = null;
+    if (process.env.PERPLEXITY_API_KEY) {
+      perplexityApiKeyPrefix = process.env.PERPLEXITY_API_KEY.substring(0, 5) + '...';
+    }
+    
     return NextResponse.json({
       success: true,
       envVarCount: envVars.length,
       envVars: envVars,
       hasAnthropicApiKey,
       hasLowercaseAnthropicApiKey,
+      hasPerplexityApiKey,
       anthropicApiKeyPrefix,
-      lowercaseAnthropicApiKeyPrefix
+      lowercaseAnthropicApiKeyPrefix,
+      perplexityApiKeyPrefix
     });
   } catch (error) {
     console.error('Error in debug endpoint:', error);
