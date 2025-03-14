@@ -143,9 +143,7 @@ export function ArticleCard({ article }: ArticleCardProps) {
             <div className="space-y-4">
               <p className="text-lg font-medium">{article.summary}</p>
               <div className="prose max-w-none dark:prose-invert">
-                {article.content.split('\n').map((paragraph, index) => (
-                  <p key={index}>{paragraph}</p>
-                ))}
+                <div dangerouslySetInnerHTML={{ __html: article.content }} />
               </div>
               <div className="flex flex-wrap gap-2 pt-4">
                 {article.topics.map((topic) => (
