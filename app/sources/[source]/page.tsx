@@ -6,12 +6,11 @@ export default async function SourcePage({ params }: { params: { source: string 
   const source = await Promise.resolve(params.source)
   
   const sourceNames: Record<string, string> = {
-    openai: "OpenAI",
-    anthropic: "Anthropic",
+    awsml: "AWS ML",
     deepmind: "DeepMind",
-    meta: "Meta AI",
-    huggingface: "Hugging Face",
-    aiblog: "AI Blog"
+    openai: "OpenAI",
+    metaresearch: "Meta Research",
+    googleresearch: "Google Research"
   }
 
   const sourceName = sourceNames[source] || source

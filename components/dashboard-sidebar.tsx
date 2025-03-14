@@ -59,17 +59,9 @@ export function DashboardSidebar() {
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
-                  <a href="/sources/openai">
+                  <a href="/sources/awsml">
                     <Newspaper className="h-4 w-4" />
-                    <span>OpenAI</span>
-                  </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <a href="/sources/anthropic">
-                    <Newspaper className="h-4 w-4" />
-                    <span>Anthropic</span>
+                    <span>AWS ML</span>
                   </a>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -83,25 +75,25 @@ export function DashboardSidebar() {
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
-                  <a href="/sources/meta">
+                  <a href="/sources/openai">
                     <Newspaper className="h-4 w-4" />
-                    <span>Meta AI</span>
+                    <span>OpenAI</span>
                   </a>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
-                  <a href="/sources/huggingface">
+                  <a href="/sources/metaresearch">
                     <Newspaper className="h-4 w-4" />
-                    <span>Hugging Face</span>
+                    <span>Meta Research</span>
                   </a>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
-                  <a href="/sources/aiblog">
+                  <a href="/sources/googleresearch">
                     <Newspaper className="h-4 w-4" />
-                    <span>AI Blog</span>
+                    <span>Google Research</span>
                   </a>
                 </SidebarMenuButton>
               </SidebarMenuItem>

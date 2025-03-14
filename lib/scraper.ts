@@ -9,31 +9,45 @@ let cachedArticles: Article[] = [];
 
 // Sources to scrape
 const SOURCES = {
-  "Anthropic": {
-    "url": "https://www.anthropic.com/news",
+  "AWS ML": {
+    "url": "https://aws.amazon.com/blogs/machine-learning/",
     "type": "html",
-    "selector": "li, article",
-    "title_selector": "h3, h2",
+    "selector": "article, .blog-post",
+    "title_selector": "h2, .blog-post-title",
     "link_selector": "a",
-    "base_url": "https://www.anthropic.com"
+    "base_url": "https://aws.amazon.com"
   },
-  "Google AI": {
-    "url": "https://blog.google/technology/ai/",
+  "DeepMind": {
+    "url": "https://deepmind.google/discover/blog/",
     "type": "html",
-    "selector": "article",
-    "title_selector": "h3, h2",
+    "selector": "article, .blog-card",
+    "title_selector": "h2, h3, .title",
     "link_selector": "a",
-    "base_url": "https://blog.google"
+    "base_url": "https://deepmind.google"
   },
-  "Wired AI": {
-    "url": "https://www.wired.com/feed/tag/ai/latest/rss",
-    "type": "rss",
-    "base_url": "https://www.wired.com"
+  "OpenAI": {
+    "url": "https://openai.com/news/",
+    "type": "html",
+    "selector": "article, .post, .news-item",
+    "title_selector": "h2, h3, .title",
+    "link_selector": "a",
+    "base_url": "https://openai.com"
   },
-  "AI Blog": {
-    "url": "https://www.artificial-intelligence.blog/ai-news?format=rss",
-    "type": "rss",
-    "base_url": "https://www.artificial-intelligence.blog"
+  "Meta Research": {
+    "url": "https://research.facebook.com/",
+    "type": "html",
+    "selector": "article, .research-item, .blog-post",
+    "title_selector": "h2, h3, .title",
+    "link_selector": "a",
+    "base_url": "https://research.facebook.com"
+  },
+  "Google Research": {
+    "url": "https://research.google/blog/",
+    "type": "html",
+    "selector": "article, .blog-card, .post-item",
+    "title_selector": "h2, h3, .title",
+    "link_selector": "a",
+    "base_url": "https://research.google"
   }
 };
 
@@ -257,7 +271,15 @@ export async function scrapeSources(): Promise<Article[]> {
         
         // Find all article elements
         const articleElements = $(config.selector);
-        const articles = [];
+        
+        // Define the article type
+        interface HtmlArticle {
+          title: string;
+          link: string;
+        }
+        
+        // Initialize articles array with proper typing
+        const articles: HtmlArticle[] = [];
         
         articleElements.each((_, element) => {
           const titleElement = $(element).find(config.title_selector);
@@ -350,7 +372,7 @@ export function getArticles(): Article[] {
  * Generate fallback articles for when no real articles are available
  */
 function generateFallbackArticles(): Article[] {
-  const sources = ["Anthropic", "OpenAI", "Google AI", "Wired AI", "AI Blog"];
+  const sources = ["AWS ML", "DeepMind", "OpenAI", "Meta Research", "Google Research"];
   const topics = ["LLM", "Computer Vision", "AI Safety", "Multimodal AI", "Research", "Technology"];
   
   return Array.from({ length: 10 }, (_, i) => ({
