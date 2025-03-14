@@ -547,29 +547,85 @@ export async function getArticles(): Promise<Article[]> {
     return cachedArticles;
   }
   
+  console.log("In-memory cache empty, trying Redis...");
+  
   // Then try reading from Redis
   try {
     const redis = getRedisClient();
     if (redis) {
-      const articlesJson = await redis.get(ARTICLES_REDIS_KEY);
-      
-      if (articlesJson) {
-        const articles = JSON.parse(articlesJson) as Article[];
+      try {
+        console.log(`Attempting to fetch articles from Redis with key: ${ARTICLES_REDIS_KEY}`);
+        const articlesJson = await redis.get(ARTICLES_REDIS_KEY);
         
-        // Update in-memory cache
-        cachedArticles = articles;
-        
-        console.log(`Loaded ${articles.length} articles from Redis`);
-        return articles;
+        if (articlesJson) {
+          console.log(`Found articles JSON in Redis, length: ${articlesJson.length} characters`);
+          try {
+            const articles = JSON.parse(articlesJson) as Article[];
+            
+            if (articles && articles.length > 0) {
+              // Update in-memory cache
+              cachedArticles = articles;
+              
+              console.log(`Successfully loaded ${articles.length} articles from Redis`);
+              return articles;
+            } else {
+              console.log("Redis returned empty or invalid articles array");
+            }
+          } catch (parseError) {
+            console.error("Error parsing articles JSON from Redis:", parseError);
+          }
+        } else {
+          console.log("No articles found in Redis");
+        }
+      } catch (redisError) {
+        console.error("Error fetching from Redis:", redisError);
       }
+    } else {
+      console.log("Redis client not available");
     }
   } catch (error) {
-    console.error("Error reading articles from Redis:", error);
+    console.error("Error in Redis connection:", error);
   }
   
-  // Otherwise, generate fallback articles
-  console.log("No articles in cache or Redis, generating fallback articles");
-  return generateFallbackArticles();
+  // If we reach here, we couldn't get articles from Redis
+  console.log("Falling back to scraping fresh articles...");
+  
+  // Try to scrape fresh articles
+  try {
+    console.log("Attempting to scrape fresh articles");
+    const freshArticles = await scrapeSources();
+    
+    if (freshArticles && freshArticles.length > 0) {
+      console.log(`Successfully scraped ${freshArticles.length} fresh articles`);
+      
+      // Save to cache for future requests
+      cachedArticles = freshArticles;
+      
+      // Try to save to Redis
+      try {
+        const redis = getRedisClient();
+        if (redis) {
+          await redis.set(ARTICLES_REDIS_KEY, JSON.stringify(freshArticles));
+          console.log("Saved fresh articles to Redis");
+        }
+      } catch (saveError) {
+        console.error("Error saving to Redis:", saveError);
+      }
+      
+      return freshArticles;
+    }
+  } catch (scrapeError) {
+    console.error("Error scraping fresh articles:", scrapeError);
+  }
+  
+  // Last resort: generate fallback articles
+  console.log("No articles available from any source, generating fallback articles");
+  const fallbackArticles = generateFallbackArticles();
+  
+  // Save fallbacks to in-memory cache to prevent repeated generation
+  cachedArticles = fallbackArticles;
+  
+  return fallbackArticles;
 }
 
 /**
