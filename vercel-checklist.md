@@ -1,7 +1,9 @@
 Vercel Deployment Checklist:
 1. Environment Variables:
    - ANTHROPIC_API_KEY (already added)
-     - Note: Now using Vercel AI SDK with Anthropic, which requires the same API key
+     - Note: Now using direct Anthropic SDK
+     - Important: Ensure the API key is in the correct format (should start with 'sk-ant-')
+     - Check the API key format using the /api/check-api-key endpoint
    - REDIS_URL
    - CRON_SECRET (for securing cron endpoints)
 2. Cron Jobs:
@@ -13,3 +15,4 @@ Vercel Deployment Checklist:
    - Deployed to iad1 (US East)
 5. Dependencies:
    - Added ai and @ai-sdk/anthropic packages for article summarization
+   - Using @anthropic-ai/sdk for direct API access
