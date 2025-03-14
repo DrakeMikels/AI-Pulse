@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createAnthropic } from '@ai-sdk/anthropic';
-import { generateText } from 'ai';
+import { Anthropic } from '@anthropic-ai/sdk';
 
 export async function POST(request: Request) {
   try {
@@ -24,8 +23,14 @@ export async function POST(request: Request) {
       );
     }
 
-    // Create a custom Anthropic provider with the API key
-    const anthropicWithKey = createAnthropic({ apiKey });
+    // Log the API key format (first few characters)
+    console.log('Using API key starting with:', apiKey.substring(0, 5) + '...');
+    console.log('API key length:', apiKey.length);
+
+    // Initialize Anthropic client directly
+    const anthropic = new Anthropic({
+      apiKey: apiKey.trim(), // Ensure no whitespace
+    });
 
     // Create the prompt for Claude
     const prompt = `
@@ -46,19 +51,28 @@ export async function POST(request: Request) {
     Format your response using markdown with clear headings and bullet points. Keep the summary concise and focused on the most important information.
     `;
 
-    // Call Claude API using Vercel AI SDK
-    console.log('Calling Claude API for article summarization via Vercel AI SDK...');
-    console.log('Using API key starting with:', apiKey.substring(0, 5) + '...');
+    // Call Claude API directly
+    console.log('Calling Claude API for article summarization...');
     
-    const { text } = await generateText({
-      model: anthropicWithKey('claude-3-5-sonnet-20240620'),
-      prompt: prompt,
-      maxTokens: 1000,
+    const response = await anthropic.messages.create({
+      model: 'claude-3-5-sonnet-20240620',
+      max_tokens: 1000,
+      messages: [
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ],
     });
 
-    console.log('Successfully generated summary with Claude via Vercel AI SDK');
+    // Extract the summary from Claude's response
+    const summary = response.content[0].type === 'text' 
+      ? response.content[0].text 
+      : 'Unable to generate summary';
     
-    return NextResponse.json({ summary: text });
+    console.log('Successfully generated summary with Claude');
+    
+    return NextResponse.json({ summary });
   } catch (error) {
     console.error('Error summarizing article with Claude:', error);
     return NextResponse.json(
