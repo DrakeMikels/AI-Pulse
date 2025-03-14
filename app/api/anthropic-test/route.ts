@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { Anthropic } from '@anthropic-ai/sdk';
+import { anthropic } from '@ai-sdk/anthropic';
+import { generateText } from 'ai';
 
 export async function GET() {
   try {
@@ -18,23 +19,12 @@ export async function GET() {
     
     console.log('API key found:', apiKey.substring(0, 5) + '...');
     
-    // Initialize the Anthropic client
-    const client = new Anthropic({
-      apiKey
-    });
-    console.log('Anthropic client initialized');
-    
-    // Simple text generation test
-    console.log('Starting text generation...');
-    const response = await client.messages.create({
-      model: 'claude-3-5-sonnet-20240620',
-      max_tokens: 300,
-      messages: [
-        {
-          role: 'user',
-          content: 'What are the latest developments in AI? Please provide a brief summary.'
-        }
-      ]
+    // Simple text generation test using Vercel AI SDK
+    console.log('Starting text generation with Vercel AI SDK...');
+    const { text } = await generateText({
+      model: anthropic('claude-3-5-sonnet-20240620'),
+      prompt: 'What are the latest developments in AI? Please provide a brief summary.',
+      maxTokens: 300,
     });
     
     console.log('Response received');
@@ -42,8 +32,8 @@ export async function GET() {
     // Return the response
     return NextResponse.json({
       success: true,
-      message: 'Anthropic test successful',
-      content: response.content
+      message: 'Anthropic test successful using Vercel AI SDK',
+      content: [{ type: 'text', text }]
     });
   } catch (error) {
     console.error('Error in Anthropic test endpoint:', error);
