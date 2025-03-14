@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { anthropic } from '@ai-sdk/anthropic';
+import { createAnthropic } from '@ai-sdk/anthropic';
 import { generateText } from 'ai';
 
 export async function GET() {
@@ -19,10 +19,13 @@ export async function GET() {
     
     console.log('API key found:', apiKey.substring(0, 5) + '...');
     
+    // Create a custom Anthropic provider with the API key
+    const anthropicWithKey = createAnthropic({ apiKey });
+    
     // Simple text generation test using Vercel AI SDK
     console.log('Starting text generation with Vercel AI SDK...');
     const { text } = await generateText({
-      model: anthropic('claude-3-5-sonnet-20240620'),
+      model: anthropicWithKey('claude-3-5-sonnet-20240620'),
       prompt: 'What are the latest developments in AI? Please provide a brief summary.',
       maxTokens: 300,
     });

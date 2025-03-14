@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { anthropic } from '@ai-sdk/anthropic';
+import { createAnthropic } from '@ai-sdk/anthropic';
 import { generateText } from 'ai';
 
 export async function GET() {
@@ -19,12 +19,15 @@ export async function GET() {
     
     console.log('API key found:', apiKey.substring(0, 5) + '...');
     
+    // Create a custom Anthropic provider with the API key
+    const anthropicWithKey = createAnthropic({ apiKey });
+    
     // Note: The Vercel AI SDK might not support tool use directly yet
     // Instead, we'll use a prompt that asks Claude to simulate a web search
     
     console.log('Starting simulated web search with Vercel AI SDK...');
     const { text: searchResults } = await generateText({
-      model: anthropic('claude-3-5-sonnet-20240620'),
+      model: anthropicWithKey('claude-3-5-sonnet-20240620'),
       prompt: 'Imagine you just performed a web search for "latest news about Anthropic and Claude". Provide what you think would be the most recent and relevant information about Anthropic and their Claude AI models. Include details about any recent announcements, updates, or news stories.',
       maxTokens: 1000,
     });
@@ -34,7 +37,7 @@ export async function GET() {
     // Now ask Claude to format the search results as JSON
     console.log('Asking Claude to format search results as JSON...');
     const { text: formattedResults } = await generateText({
-      model: anthropic('claude-3-5-sonnet-20240620'),
+      model: anthropicWithKey('claude-3-5-sonnet-20240620'),
       prompt: `Based on the following information about "latest news about Anthropic and Claude", please provide the information in the following JSON format:
       
       {

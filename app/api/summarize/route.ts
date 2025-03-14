@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { anthropic } from '@ai-sdk/anthropic';
+import { createAnthropic } from '@ai-sdk/anthropic';
 import { generateText } from 'ai';
 
 export async function POST(request: Request) {
@@ -24,6 +24,9 @@ export async function POST(request: Request) {
       );
     }
 
+    // Create a custom Anthropic provider with the API key
+    const anthropicWithKey = createAnthropic({ apiKey });
+
     // Create the prompt for Claude
     const prompt = `
     I need a concise summary of the following article titled "${title}".
@@ -45,8 +48,10 @@ export async function POST(request: Request) {
 
     // Call Claude API using Vercel AI SDK
     console.log('Calling Claude API for article summarization via Vercel AI SDK...');
+    console.log('Using API key starting with:', apiKey.substring(0, 5) + '...');
+    
     const { text } = await generateText({
-      model: anthropic('claude-3-5-sonnet-20240620'),
+      model: anthropicWithKey('claude-3-5-sonnet-20240620'),
       prompt: prompt,
       maxTokens: 1000,
     });
