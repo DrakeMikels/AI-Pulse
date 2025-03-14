@@ -1,6 +1,6 @@
 "use client"
 
-import { Bookmark, Home, Newspaper, Settings, TrendingUp } from "lucide-react"
+import { Bookmark, Home, Newspaper, Settings, TrendingUp, Sparkles } from "lucide-react"
 import {
   Sidebar,
   SidebarContent,
@@ -58,6 +58,14 @@ export function DashboardSidebar() {
           <SidebarGroupLabel>Sources</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <a href="/sources/anthropic">
+                    <Sparkles className="h-4 w-4" />
+                    <span>Anthropic</span>
+                  </a>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
                   <a href="/sources/awsml">

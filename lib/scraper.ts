@@ -95,8 +95,11 @@ const SOURCES: Record<string, Source> = {
     "base_url": "https://blog.google"
   },
   "Anthropic": {
-    "url": "https://www.anthropic.com/feed.xml",
-    "type": "rss",
+    "url": "https://www.anthropic.com/news",
+    "type": "html",
+    "selector": "li.group, article",
+    "title_selector": "h3, h2",
+    "link_selector": "a",
     "base_url": "https://www.anthropic.com"
   },
   "Hugging Face": {
