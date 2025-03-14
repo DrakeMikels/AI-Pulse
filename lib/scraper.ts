@@ -30,46 +30,30 @@ type Source = WebSource | RssSource;
 // Define sources
 const sources: Source[] = [
   {
-    url: 'https://www.anthropic.com/blog',
+    url: 'https://www.anthropic.com/news',
     type: 'web',
-    selector: '.blog-card',
-    title_selector: 'h3',
+    selector: 'li, article',
+    title_selector: 'h3, h2',
     link_selector: 'a',
     base_url: 'https://www.anthropic.com'
   },
   {
     url: 'https://blog.google/technology/ai/',
     type: 'web',
-    selector: '.uni-item',
-    title_selector: '.uni-item__title',
-    link_selector: 'a.uni-item__link',
+    selector: 'article',
+    title_selector: 'h3, h2',
+    link_selector: 'a',
     base_url: 'https://blog.google'
   },
   {
-    url: 'https://news.mit.edu/topic/artificial-intelligence2',
-    type: 'web',
-    selector: '.article-item',
-    title_selector: 'h3',
-    link_selector: 'a',
-    base_url: 'https://news.mit.edu'
-  },
-  {
-    url: 'https://www.theverge.com/ai-artificial-intelligence',
-    type: 'web',
-    selector: '.duet--content-cards--content-card',
-    title_selector: 'h2',
-    link_selector: 'a',
-    base_url: ''
-  },
-  {
-    url: 'https://techcrunch.com/category/artificial-intelligence/feed/',
+    url: 'https://www.wired.com/feed/tag/ai/latest/rss',
     type: 'rss',
-    base_url: 'https://techcrunch.com'
+    base_url: 'https://www.wired.com'
   },
   {
-    url: 'https://www.technologyreview.com/topic/artificial-intelligence/feed',
+    url: 'https://www.artificial-intelligence.blog/ai-news?format=rss',
     type: 'rss',
-    base_url: 'https://www.technologyreview.com'
+    base_url: 'https://www.artificial-intelligence.blog'
   }
 ];
 
@@ -82,6 +66,12 @@ interface RssArticleItem {
   pubDate?: string;
 }
 
+// Helper function to get a proxied URL to avoid CORS issues
+function getProxiedUrl(url: string): string {
+  // Use corsproxy.io as a CORS proxy
+  return `https://corsproxy.io/?${encodeURIComponent(url)}`;
+}
+
 /**
  * Scrape articles from an RSS feed
  */
@@ -91,7 +81,11 @@ async function scrapeRss(url: string, sourceName: string): Promise<RssArticleIte
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     };
     
-    const response = await axios.get(url, { headers });
+    // Use proxy for the request
+    const proxiedUrl = getProxiedUrl(url);
+    console.log(`Making proxied RSS request to ${proxiedUrl}...`);
+    
+    const response = await axios.get(proxiedUrl, { headers });
     console.log(`RSS feed status code: ${response.status}`);
     
     // Parse the XML
@@ -145,7 +139,11 @@ async function scrapeArticle(url: string) {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     };
     
-    const response = await axios.get(url, { headers });
+    // Use proxy for the request
+    const proxiedUrl = getProxiedUrl(url);
+    console.log(`Making proxied article request to ${proxiedUrl}...`);
+    
+    const response = await axios.get(proxiedUrl, { headers });
     const $ = cheerio.load(response.data);
     
     // Extract article content
@@ -322,7 +320,11 @@ async function scrapeArticles(): Promise<Article[]> {
               'Accept-Language': 'en-US,en;q=0.9',
             };
             
-            const response = await axios.get(source.url, { 
+            // Use proxy for the request
+            const proxiedUrl = getProxiedUrl(source.url);
+            console.log(`Making proxied web request to ${proxiedUrl}...`);
+            
+            const response = await axios.get(proxiedUrl, { 
               headers,
               timeout: 10000, // 10 second timeout
               validateStatus: (status) => true // Accept any status code to log it
@@ -383,7 +385,11 @@ async function scrapeArticles(): Promise<Article[]> {
               'Accept': 'application/rss+xml,application/xml,text/xml',
             };
             
-            const response = await axios.get(source.url, { 
+            // Use proxy for the request
+            const proxiedUrl = getProxiedUrl(source.url);
+            console.log(`Making proxied RSS request to ${proxiedUrl}...`);
+            
+            const response = await axios.get(proxiedUrl, { 
               headers,
               timeout: 10000,
               validateStatus: (status) => true
