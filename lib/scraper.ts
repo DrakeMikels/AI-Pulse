@@ -628,6 +628,92 @@ export async function scrapeAndSaveArticlesWithBrave() {
 }
 
 /**
+ * Main function to scrape and save articles from all sources
+ */
+export async function scrapeAndSaveArticles() {
+  console.log("Starting article scraping and saving...");
+  
+  try {
+    // Clear the article cache first to ensure we get fresh articles
+    await clearArticleCache();
+    
+    // Use traditional scraping method
+    console.log('Using traditional scraping method');
+    const traditionalArticles = await scrapeSources();
+    console.log(`Scraped ${traditionalArticles.length} articles from traditional sources`);
+    
+    if (traditionalArticles.length === 0) {
+      console.log("No articles found from traditional sources, using fallback articles");
+      const fallbackArticles = generateFallbackArticles();
+      await saveArticles(fallbackArticles);
+      return { 
+        success: false, 
+        error: "No articles found from traditional sources", 
+        count: fallbackArticles.length 
+      };
+    }
+    
+    // Save articles to Redis and in-memory cache
+    await saveArticles(traditionalArticles);
+    
+    return { 
+      success: true, 
+      message: `Successfully scraped and saved ${traditionalArticles.length} articles`, 
+      count: traditionalArticles.length 
+    };
+  } catch (error) {
+    console.error("Error scraping and saving articles:", error);
+    return { 
+      success: false, 
+      error: `Error scraping and saving articles: ${error instanceof Error ? error.message : String(error)}` 
+    };
+  }
+}
+
+/**
+ * Scrape and save articles using MCP (Machine Content Processing)
+ */
+export async function scrapeAndSaveArticlesWithMcp() {
+  console.log("Starting article scraping with MCP...");
+  
+  try {
+    // Clear the article cache first to ensure we get fresh articles
+    await clearArticleCache();
+    
+    // Fetch articles using MCP
+    console.log('Using MCP scraping method');
+    const mcpArticles = await fetchArticlesWithMCP(10); // 10 articles per source
+    console.log(`Fetched ${mcpArticles.length} articles using MCP`);
+    
+    if (mcpArticles.length === 0) {
+      console.log("No articles found from MCP, using fallback articles");
+      const fallbackArticles = generateFallbackArticles();
+      await saveArticles(fallbackArticles);
+      return { 
+        success: false, 
+        error: "No articles found from MCP", 
+        count: fallbackArticles.length 
+      };
+    }
+    
+    // Save articles to Redis and in-memory cache
+    await saveArticles(mcpArticles);
+    
+    return { 
+      success: true, 
+      message: `Successfully scraped and saved ${mcpArticles.length} articles using MCP`, 
+      count: mcpArticles.length 
+    };
+  } catch (error) {
+    console.error("Error scraping and saving articles with MCP:", error);
+    return { 
+      success: false, 
+      error: `Error scraping and saving articles with MCP: ${error instanceof Error ? error.message : String(error)}` 
+    };
+  }
+}
+
+/**
  * Enhanced function to scrape and save articles
  */
 export async function refreshArticles() {
