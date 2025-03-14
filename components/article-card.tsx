@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Bookmark, ExternalLink, Share2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
@@ -18,6 +18,23 @@ export function ArticleCard({ article }: ArticleCardProps) {
   const [isBookmarked, setIsBookmarked] = useState(false)
   const [isReadingMode, setIsReadingMode] = useState(false)
   const { toast } = useToast()
+
+  // Check if article is bookmarked on component mount
+  useEffect(() => {
+    const checkBookmarkStatus = async () => {
+      try {
+        const response = await fetch(`/api/bookmarks/${article.id}`);
+        if (response.ok) {
+          const data = await response.json();
+          setIsBookmarked(data.isBookmarked);
+        }
+      } catch (error) {
+        console.error("Error checking bookmark status:", error);
+      }
+    };
+
+    checkBookmarkStatus();
+  }, [article.id]);
 
   // Process the article content to remove image tags and URLs
   const processContent = (content: string): string => {

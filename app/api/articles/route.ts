@@ -38,7 +38,8 @@ export async function GET(request: NextRequest) {
 
   // Apply bookmarks filter
   if (bookmarked === "true") {
-    filteredArticles = filteredArticles.filter((article) => bookmarks.has(article.id))
+    const bookmarkedIds = bookmarks.getAll();
+    filteredArticles = filteredArticles.filter((article) => bookmarkedIds.includes(article.id))
   }
 
   // Apply timeframe filter

@@ -55,11 +55,24 @@ export default function SettingsPage() {
   }
 
   const clearBookmarks = async () => {
-    // This would be implemented with a proper API endpoint
-    toast({
-      title: "Bookmarks cleared",
-      description: "All your bookmarks have been removed",
-    })
+    try {
+      const response = await fetch('/api/bookmarks/clear', { method: 'POST' });
+      if (response.ok) {
+        toast({
+          title: "Bookmarks cleared",
+          description: "All your bookmarks have been removed",
+        });
+      } else {
+        throw new Error('Failed to clear bookmarks');
+      }
+    } catch (error) {
+      console.error('Error clearing bookmarks:', error);
+      toast({
+        title: "Error",
+        description: "Failed to clear bookmarks",
+        variant: "destructive",
+      });
+    }
   }
 
   return (
