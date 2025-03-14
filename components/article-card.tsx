@@ -14,10 +14,35 @@ interface ArticleCardProps {
   article: Article
 }
 
+// Helper function to sanitize and prepare content for rendering
+function prepareContentForRendering(content: string, source: string): string {
+  // If content contains HTML tags that are showing as plain text (like in Google AI articles)
+  if (content.includes("<img src=") || content.includes("&lt;img") || content.includes("<img") || content.includes("&lt;")) {
+    // Try to decode HTML entities if they exist
+    let processedContent = content;
+    
+    // Replace HTML entities with actual characters
+    processedContent = processedContent.replace(/&lt;/g, '<');
+    processedContent = processedContent.replace(/&gt;/g, '>');
+    processedContent = processedContent.replace(/&quot;/g, '"');
+    processedContent = processedContent.replace(/&amp;/g, '&');
+    
+    // Fix broken image tags
+    processedContent = processedContent.replace(/<img src="([^"]+)"/g, '<img src="$1" alt="Article image"');
+    
+    return processedContent;
+  }
+  
+  return content;
+}
+
 export function ArticleCard({ article }: ArticleCardProps) {
   const [isBookmarked, setIsBookmarked] = useState(false)
   const [isReadingMode, setIsReadingMode] = useState(false)
   const { toast } = useToast()
+
+  // Prepare the content for rendering
+  const preparedContent = prepareContentForRendering(article.content, article.source);
 
   const toggleBookmark = async () => {
     try {
@@ -143,7 +168,7 @@ export function ArticleCard({ article }: ArticleCardProps) {
             <div className="space-y-4">
               <p className="text-lg font-medium">{article.summary}</p>
               <div className="prose max-w-none dark:prose-invert">
-                <div dangerouslySetInnerHTML={{ __html: article.content }} />
+                <div dangerouslySetInnerHTML={{ __html: preparedContent }} />
               </div>
               <div className="flex flex-wrap gap-2 pt-4">
                 {article.topics.map((topic) => (
