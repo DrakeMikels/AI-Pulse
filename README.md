@@ -5,6 +5,7 @@ AI Pulse is a web-based dashboard for scraping and summarizing AI news from vari
 ## Features
 
 - Aggregates AI news from multiple sources (OpenAI, Anthropic, Google AI, etc.)
+- Uses Brave Search API to find the latest AI articles
 - Summarizes articles using OpenAI's API
 - Provides a clean, modern UI for browsing articles
 - Allows bookmarking favorite articles
@@ -16,7 +17,7 @@ AI Pulse is a web-based dashboard for scraping and summarizing AI news from vari
 
 - **Frontend**: Next.js, React, Tailwind CSS, Shadcn/UI
 - **Backend**: Node.js with Express.js, Python for scraping
-- **APIs**: OpenAI API for article summarization
+- **APIs**: OpenAI API for article summarization, Brave Search API for content discovery
 - **Deployment**: Vercel
 
 ## Local Development
@@ -26,6 +27,7 @@ AI Pulse is a web-based dashboard for scraping and summarizing AI news from vari
 - Node.js (v18 or later)
 - Python (v3.8 or later)
 - OpenAI API key
+- Brave Search API key
 
 ### Setup
 
@@ -41,9 +43,10 @@ AI Pulse is a web-based dashboard for scraping and summarizing AI news from vari
    pip install -r requirements.txt
    ```
 
-3. Create a `.env` file in the root directory with your OpenAI API key:
+3. Create a `.env` file in the root directory with your API keys:
    ```
    OPENAI_API_KEY=your_openai_api_key_here
+   BRAVE_API_KEY=your_brave_api_key_here
    ```
 
 4. Run the development server:
@@ -78,11 +81,24 @@ Or use the UI's "Refresh Articles" button in the Settings page.
 
 3. Add environment variables:
    - OPENAI_API_KEY: Your OpenAI API key
+   - BRAVE_API_KEY: Your Brave Search API key
 
 4. Deploy the project.
 
 5. Set up the cron job for automatic scraping:
    - Vercel will use the configuration in `vercel.json` to run the scraper every 6 hours
+
+## Brave Search API
+
+This project uses the Brave Search API to discover the latest AI news articles. The free tier of the Brave Search API allows:
+- 1 request per second
+- 2,000 requests per month
+- Web search capability
+
+To get your own Brave Search API key:
+1. Sign up at [https://brave.com/search/api/](https://brave.com/search/api/)
+2. Create a new API key
+3. Add the key to your environment variables as `BRAVE_API_KEY`
 
 ## Deployment Notes
 

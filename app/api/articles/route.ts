@@ -17,6 +17,24 @@ export async function GET(request: NextRequest) {
   const articles = await getArticles()
   let filteredArticles = [...articles]
 
+  // Normalize article dates and fix future dates
+  const now = new Date();
+  
+  filteredArticles = filteredArticles.map(article => {
+    // Ensure the article has a valid date
+    const publishDate = new Date(article.publishedAt);
+    
+    // If date is invalid or in the future, set it to now
+    if (isNaN(publishDate.getTime()) || publishDate > now) {
+      console.log(`Fixing future date for article: ${article.title.substring(0, 30)}...`);
+      article.publishedAt = now.toISOString();
+    }
+    
+    return article;
+  });
+  
+  console.log(`Normalized dates for ${articles.length} articles`);
+
   // Apply search query filter
   if (query) {
     const lowerQuery = query.toLowerCase()
@@ -55,6 +73,9 @@ export async function GET(request: NextRequest) {
       case "today":
         cutoffDate.setHours(0, 0, 0, 0)
         break
+      case "2days":
+        cutoffDate.setDate(now.getDate() - 2)
+        break
       case "week":
         cutoffDate.setDate(now.getDate() - 7)
         break
@@ -63,7 +84,15 @@ export async function GET(request: NextRequest) {
         break
     }
 
-    filteredArticles = filteredArticles.filter((article) => new Date(article.publishedAt) >= cutoffDate)
+    console.log(`Using cutoff date for filtering: ${cutoffDate.toISOString()}`);
+    const beforeFilter = filteredArticles.length;
+    
+    filteredArticles = filteredArticles.filter((article) => {
+      const articleDate = new Date(article.publishedAt);
+      return articleDate >= cutoffDate;
+    });
+    
+    console.log(`Filtered from ${beforeFilter} to ${filteredArticles.length} articles based on timeframe`);
   }
 
   // Sort by published date (newest first)

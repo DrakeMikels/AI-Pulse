@@ -5,12 +5,13 @@ import { parseStringPromise } from 'xml2js';
 import type { Article } from '@/types/article';
 import Redis from 'ioredis';
 import { fetchArticlesWithMCP } from './mcp-scraper';
+import { fetchArticlesWithBrave } from './brave-scraper';
 
 // Redis client initialization
 let redisClient: Redis | null = null;
 
-// Redis key for storing articles
-const ARTICLES_REDIS_KEY = 'articles';
+// Redis key for storing articles with timestamp to force refresh
+const ARTICLES_REDIS_KEY = `articles_${new Date().toISOString().split('T')[0]}`;
 
 // Initialize Redis client
 function getRedisClient() {
@@ -107,6 +108,26 @@ const SOURCES: Record<string, Source> = {
     "url": "https://huggingface.co/blog/feed.xml",
     "type": "rss",
     "base_url": "https://huggingface.co"
+  },
+  "MIT Technology Review": {
+    "url": "https://www.technologyreview.com/topic/artificial-intelligence/feed",
+    "type": "rss",
+    "base_url": "https://www.technologyreview.com"
+  },
+  "VentureBeat AI": {
+    "url": "https://venturebeat.com/category/ai/feed/",
+    "type": "rss",
+    "base_url": "https://venturebeat.com"
+  },
+  "TechCrunch AI": {
+    "url": "https://techcrunch.com/category/artificial-intelligence/feed/",
+    "type": "rss",
+    "base_url": "https://techcrunch.com"
+  },
+  "NVIDIA Blog": {
+    "url": "https://blogs.nvidia.com/blog/category/deep-learning/feed/",
+    "type": "rss",
+    "base_url": "https://blogs.nvidia.com"
   }
 };
 
@@ -162,7 +183,7 @@ async function scrapeRss(url: string, sourceName: string) {
     }
     
     console.log(`Found ${articles.length} articles in RSS feed`);
-    return articles.slice(0, 5); // Return the 5 most recent articles
+    return articles.slice(0, 15); // Return the 15 most recent articles (increased from 10)
     
   } catch (error) {
     console.error(`Error scraping RSS feed ${url}:`, error);
@@ -185,8 +206,18 @@ async function scrapeArticle(url: string) {
     const response = await axios.get(url, { 
       headers,
       timeout: 10000, // 10 second timeout
-      maxRedirects: 5
+      maxRedirects: 5,
+      validateStatus: function (status) {
+        return status < 500; // Accept all status codes less than 500
+      }
     });
+    
+    // If we got a non-200 response, log and return empty content
+    if (response.status !== 200) {
+      console.log(`Got status ${response.status} for ${url}, skipping`);
+      return { content: "", imageUrl: null };
+    }
+    
     const $ = cheerio.load(response.data);
     
     // Extract article content
@@ -242,30 +273,68 @@ function extractSimpleTopics(content: string, title: string) {
   // Default topics based on the source
   const defaultTopics = ["AI", "Technology", "Machine Learning"];
   
-  // Simple keyword-based topic extraction
+  // Simple keyword-based topic extraction with expanded AI-related keywords
   const keywords: Record<string, string> = {
+    // LLM models and companies
     "GPT": "GPT",
+    "GPT-4": "GPT-4",
+    "GPT-4o": "GPT-4o",
     "Claude": "Claude",
+    "Claude 3": "Claude 3",
     "Gemini": "Gemini",
+    "Llama": "Llama",
+    "Mistral": "Mistral",
+    "Anthropic": "Anthropic",
+    "OpenAI": "OpenAI",
+    "Google AI": "Google AI",
+    "Meta AI": "Meta AI",
+    "Microsoft": "Microsoft AI",
+    "Copilot": "Copilot",
+    
+    // AI concepts
     "LLM": "LLM",
+    "large language model": "LLM",
     "language model": "LLM",
     "multimodal": "Multimodal AI",
     "vision": "Computer Vision",
     "image": "Computer Vision",
-    "code": "Coding",
-    "programming": "Coding",
+    "code": "AI Coding",
+    "programming": "AI Coding",
     "safety": "AI Safety",
     "alignment": "AI Alignment",
     "regulation": "AI Regulation",
     "policy": "AI Policy",
-    "open source": "Open Source",
-    "research": "Research"
+    "open source": "Open Source AI",
+    "research": "AI Research",
+    "hallucination": "AI Hallucinations",
+    "fine-tuning": "Model Fine-tuning",
+    "prompt": "Prompt Engineering",
+    "RAG": "RAG",
+    "retrieval": "RAG",
+    "augmented": "RAG",
+    "embedding": "Embeddings",
+    "vector": "Vector Database",
+    "transformer": "Transformer",
+    "attention": "Attention Mechanism",
+    "generative": "Generative AI",
+    "diffusion": "Diffusion Models",
+    "synthetic": "Synthetic Data",
+    "training": "AI Training",
+    "inference": "AI Inference",
+    "GPU": "AI Hardware",
+    "TPU": "AI Hardware",
+    "chip": "AI Hardware",
+    "ethics": "AI Ethics",
+    "bias": "AI Bias",
+    "responsible": "Responsible AI",
+    "agent": "AI Agents",
+    "autonomous": "Autonomous AI"
   };
   
   const foundTopics = new Set<string>();
   
   // Check title and content for keywords
-  const textToCheck = (title + " " + content.substring(0, 1000)).toLowerCase();
+  const textToCheck = (title + " " + content.substring(0, 2000)).toLowerCase();
   
   for (const [keyword, topic] of Object.entries(keywords)) {
     if (textToCheck.includes(keyword.toLowerCase())) {
@@ -279,7 +348,7 @@ function extractSimpleTopics(content: string, title: string) {
     topicsList = [...topicsList, ...defaultTopics];
   }
   
-  return topicsList.slice(0, 3); // Return at most 3 topics
+  return topicsList.slice(0, 5); // Return at most 5 topics (increased from 3)
 }
 
 /**
@@ -314,6 +383,11 @@ export async function scrapeSources(): Promise<Article[]> {
             const summary = generateSimpleSummary(fullContent, title);
             const topics = extractSimpleTopics(fullContent, title);
             
+            // Create a safe date (1 hour in the past)
+            const now = new Date();
+            now.setHours(now.getHours() - 1);
+            const safeDate = now.toISOString();
+            
             // Create article object
             const article: Article = {
               id: uuidv4(),
@@ -324,8 +398,8 @@ export async function scrapeSources(): Promise<Article[]> {
               imageUrl: articleDetails.imageUrl || `/placeholder.svg?height=200&width=400&text=${encodeURIComponent(sourceName)}`,
               source: sourceName,
               topics,
-              publishedAt: new Date().toISOString(),
-              createdAt: new Date().toISOString()
+              publishedAt: safeDate,
+              createdAt: safeDate
             };
             
             allArticles.push(article);
@@ -386,9 +460,9 @@ export async function scrapeSources(): Promise<Article[]> {
           
           console.log(`Found ${articles.length} articles for ${sourceName}`);
           
-          // Process the first 5 articles
+          // Process the first 10 articles
           // Add a small delay between article scraping to avoid rate limiting
-          for (const article of articles.slice(0, 5)) {
+          for (const article of articles.slice(0, 10)) {
             try {
               // Get additional article details
               const articleDetails = await scrapeArticle(article.link);
@@ -396,6 +470,11 @@ export async function scrapeSources(): Promise<Article[]> {
               // Generate summary and extract topics
               const summary = generateSimpleSummary(articleDetails.content, article.title);
               const topics = extractSimpleTopics(articleDetails.content, article.title);
+              
+              // Create a safe date (1 hour in the past)
+              const now = new Date();
+              now.setHours(now.getHours() - 1);
+              const safeDate = now.toISOString();
               
               // Create article object
               const articleObj: Article = {
@@ -407,8 +486,8 @@ export async function scrapeSources(): Promise<Article[]> {
                 imageUrl: articleDetails.imageUrl || `/placeholder.svg?height=200&width=400&text=${encodeURIComponent(sourceName)}`,
                 source: sourceName,
                 topics,
-                publishedAt: new Date().toISOString(),
-                createdAt: new Date().toISOString()
+                publishedAt: safeDate,
+                createdAt: safeDate
               };
               
               allArticles.push(articleObj);
@@ -500,6 +579,11 @@ function generateFallbackArticles(): Article[] {
   const sources = ["AWS ML", "Wired AI", "AI Blog", "Google AI", "Anthropic", "Hugging Face"];
   const topics = ["LLM", "Computer Vision", "AI Safety", "Multimodal AI", "Research", "Technology"];
   
+  // Create a safe date (1 hour in the past)
+  const now = new Date();
+  now.setHours(now.getHours() - 1);
+  const safeDate = now.toISOString();
+  
   return Array.from({ length: 10 }, (_, i) => ({
     id: `sample-${i}-${Date.now()}`,
     title: `Sample Article ${i + 1}`,
@@ -509,87 +593,56 @@ function generateFallbackArticles(): Article[] {
     imageUrl: `https://placehold.co/600x400?text=AI+Article+${i + 1}`,
     source: sources[i % sources.length],
     topics: [topics[i % topics.length], topics[(i + 1) % topics.length]],
-    publishedAt: new Date().toISOString(),
-    createdAt: new Date().toISOString()
+    publishedAt: safeDate,
+    createdAt: safeDate
   }));
 }
 
 /**
- * Main function to scrape and save articles
+ * Scrape and save articles using Brave Search
  */
-export async function scrapeAndSaveArticles() {
-  console.log("Starting article refresh...");
+export async function scrapeAndSaveArticlesWithBrave() {
+  console.log("Fetching articles with Brave Search...");
   
   try {
-    // Scrape articles from all sources
-    const articles = await scrapeSources();
+    // Check if BRAVE_API_KEY is set
+    if (!process.env.BRAVE_API_KEY) {
+      console.warn('BRAVE_API_KEY not set, skipping Brave Search integration');
+      return [];
+    }
+    
+    // Fetch articles using Brave Search - reduced from 10 to 5 articles per source to avoid rate limiting
+    const articles = await fetchArticlesWithBrave(5); // 5 articles per source
     
     if (articles.length === 0) {
-      console.log("No articles found, using fallback articles");
-      const fallbackArticles = generateFallbackArticles();
-      await saveArticles(fallbackArticles);
-      return { 
-        success: false, 
-        error: "No articles found from any source", 
-        count: fallbackArticles.length 
-      };
+      console.log('No articles fetched with Brave Search');
+      return [];
     }
     
-    // Save the articles
-    const saved = await saveArticles(articles);
-    
-    if (!saved) {
-      return { 
-        success: false, 
-        error: "Failed to save articles", 
-        count: 0 
-      };
-    }
-    
-    return { 
-      success: true, 
-      count: articles.length 
-    };
+    console.log(`Successfully fetched ${articles.length} articles with Brave Search`);
+    return articles;
   } catch (error) {
-    console.error("Error in scrapeAndSaveArticles:", error);
-    return { 
-      success: false, 
-      error: String(error), 
-      count: 0 
-    };
+    console.error('Error scraping articles with Brave Search:', error);
+    return [];
   }
 }
 
 /**
- * Enhanced function to scrape and save articles with MCP integration
+ * Enhanced function to scrape and save articles
  */
-export async function scrapeAndSaveArticlesWithMcp() {
-  console.log("Starting enhanced article refresh with MCP...");
+export async function refreshArticles() {
+  console.log("Starting article refresh...");
   
   try {
-    // Get articles using traditional scraping
-    let articles = await scrapeSources();
+    // Clear the article cache first to ensure we get fresh articles
+    await clearArticleCache();
     
-    // If the API key is set, also fetch articles using MCP
-    if (process.env.ANTHROPIC_API_KEY) {
-      console.log("MCP integration enabled, fetching additional articles...");
-      const mcpArticles = await fetchArticlesWithMCP();
-      
-      // Combine articles, avoiding duplicates by URL
-      const existingUrls = new Set(articles.map(article => article.url));
-      for (const article of mcpArticles) {
-        if (!existingUrls.has(article.url)) {
-          articles.push(article);
-          existingUrls.add(article.url);
-        }
-      }
-      
-      console.log(`Added ${mcpArticles.length} articles from MCP`);
-    } else {
-      console.log("ANTHROPIC_API_KEY not set, skipping MCP integration");
-    }
+    // Use traditional scraping only
+    console.log('Using traditional scraping method');
+    const traditionalArticles = await scrapeSources();
+    console.log(`Scraped ${traditionalArticles.length} articles from traditional sources`);
     
-    if (articles.length === 0) {
+    if (traditionalArticles.length === 0) {
       console.log("No articles found, using fallback articles");
       const fallbackArticles = generateFallbackArticles();
       await saveArticles(fallbackArticles);
@@ -600,27 +653,44 @@ export async function scrapeAndSaveArticlesWithMcp() {
       };
     }
     
-    // Save the articles
-    const saved = await saveArticles(articles);
-    
-    if (!saved) {
-      return { 
-        success: false, 
-        error: "Failed to save articles", 
-        count: 0 
-      };
-    }
+    // Save articles to Redis and in-memory cache
+    await saveArticles(traditionalArticles);
     
     return { 
       success: true, 
-      count: articles.length 
+      message: `Successfully refreshed and saved ${traditionalArticles.length} articles`, 
+      count: traditionalArticles.length 
     };
   } catch (error) {
-    console.error("Error in scrapeAndSaveArticlesWithMcp:", error);
+    console.error("Error refreshing articles:", error);
     return { 
       success: false, 
-      error: String(error), 
-      count: 0 
+      error: `Error refreshing articles: ${error instanceof Error ? error.message : String(error)}` 
     };
+  }
+}
+
+// Clear the article cache (both Redis and in-memory)
+async function clearArticleCache(): Promise<void> {
+  console.log("Clearing article cache...");
+  
+  // Clear in-memory cache
+  cachedArticles = [];
+  
+  // Clear Redis cache if available
+  try {
+    const redis = getRedisClient();
+    if (redis) {
+      // Get all article keys
+      const keys = await redis.keys('articles_*');
+      
+      if (keys.length > 0) {
+        // Delete all article keys
+        await redis.del(...keys);
+        console.log(`Cleared ${keys.length} article keys from Redis cache`);
+      }
+    }
+  } catch (error) {
+    console.error("Error clearing Redis cache:", error);
   }
 } 

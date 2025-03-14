@@ -48,6 +48,7 @@ export function FilterBar({ filters, onChange }: FilterBarProps) {
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="today">Today</SelectItem>
+          <SelectItem value="2days">Last 2 Days</SelectItem>
           <SelectItem value="week">This Week</SelectItem>
           <SelectItem value="month">This Month</SelectItem>
           <SelectItem value="all">All Time</SelectItem>

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Bookmark, ExternalLink, Share2 } from "lucide-react"
+import { Bookmark, ExternalLink, Share2, FileText } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -18,6 +18,8 @@ interface ArticleCardProps {
 export function ArticleCard({ article }: ArticleCardProps) {
   const [isBookmarked, setIsBookmarked] = useState(false)
   const [isReadingMode, setIsReadingMode] = useState(false)
+  const [isSummarizing, setIsSummarizing] = useState(false)
+  const [aiSummary, setAiSummary] = useState<string | null>(null)
   const { toast } = useToast()
   const router = useRouter()
 
@@ -40,38 +42,51 @@ export function ArticleCard({ article }: ArticleCardProps) {
 
   // Process the article content to remove image tags and URLs
   const processContent = (content: string): string => {
-    // Remove any lines with image URLs or HTML tags
-    const cleanedContent = content
+    if (!content) return "";
+    
+    // First remove any HTML tags completely
+    let cleanedContent = content.replace(/<[^>]*>/g, ' ');
+    
+    // Remove any lines with image URLs or specific patterns
+    cleanedContent = cleanedContent
       .split('\n')
       .filter(line => {
         const lowerLine = line.toLowerCase();
         return !(
           lowerLine.includes('src=') || 
           lowerLine.includes('https://storage.googleapis.com/') || 
-          lowerLine.includes('<img') || 
           lowerLine.includes('uniblog-publish') ||
-          lowerLine.startsWith('<img') ||
           lowerLine.match(/^https?:\/\//)
         );
       })
       .join('\n');
     
-    // Further clean any HTML tags and trim whitespace
+    // Further clean any remaining HTML entities and trim whitespace
     return cleanedContent
-      .replace(/<[^>]*>/g, ' ')
+      .replace(/&[a-z0-9]+;/gi, ' ') // Remove HTML entities like &nbsp;
       .replace(/\s+/g, ' ')
       .trim();
   };
 
   // Get a clean version of the article content for display
   const getCleanSummary = (article: Article): string => {
-    // If the summary contains image URLs, clean it
-    if (article.summary.includes('src=') || 
-        article.summary.includes('https://storage.googleapis.com/') ||
-        article.summary.includes('<img')) {
+    if (!article.summary) return "Read the full article for more details.";
+    
+    // First remove any HTML tags completely
+    let cleanSummary = article.summary.replace(/<[^>]*>/g, '');
+    
+    // If the summary still contains image URLs or specific patterns, return a default message
+    if (cleanSummary.includes('src=') || 
+        cleanSummary.includes('https://storage.googleapis.com/') ||
+        cleanSummary.includes('bsf_rt_marker')) {
       return "Read the full article for more details.";
     }
-    return article.summary;
+    
+    // Further clean any HTML entities and trim whitespace
+    return cleanSummary
+      .replace(/&[a-z0-9]+;/gi, ' ') // Remove HTML entities like &nbsp;
+      .replace(/\s+/g, ' ')
+      .trim();
   };
 
   const toggleBookmark = async () => {
@@ -123,6 +138,52 @@ export function ArticleCard({ article }: ArticleCardProps) {
     }
   }
 
+  const summarizeArticle = async () => {
+    if (aiSummary) {
+      // If we already have a summary, just show it
+      setIsReadingMode(true)
+      return
+    }
+
+    setIsSummarizing(true)
+    try {
+      const response = await fetch('/api/summarize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: article.content,
+          title: article.title,
+          url: article.url,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to summarize article')
+      }
+
+      const data = await response.json()
+      setAiSummary(data.summary)
+      setIsReadingMode(true)
+      
+      toast({
+        title: "Summary generated",
+        description: "AI-powered summary is ready",
+        variant: "success",
+      })
+    } catch (error) {
+      console.error("Error summarizing article:", error)
+      toast({
+        title: "Error",
+        description: "Failed to generate summary",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSummarizing(false)
+    }
+  }
+
   return (
     <>
       <Card className="h-full flex flex-col overflow-hidden transition-all hover:shadow-md">
@@ -163,9 +224,19 @@ export function ArticleCard({ article }: ArticleCardProps) {
           </div>
         </CardContent>
         <CardFooter className="flex items-center justify-between p-4 pt-0">
-          <Button variant="ghost" size="sm" onClick={() => setIsReadingMode(true)}>
-            Read More
-          </Button>
+          <div className="flex space-x-1">
+            <Button variant="ghost" size="sm" onClick={() => setIsReadingMode(true)}>
+              Read More
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={summarizeArticle}
+              disabled={isSummarizing}
+            >
+              {isSummarizing ? "Summarizing..." : "AI Summary"}
+            </Button>
+          </div>
           <div className="flex space-x-1">
             <Button variant="ghost" size="icon" onClick={toggleBookmark}>
               <Bookmark className={`h-4 w-4 ${isBookmarked ? "fill-primary" : ""}`} />
@@ -202,7 +273,41 @@ export function ArticleCard({ article }: ArticleCardProps) {
               </div>
             )}
             <div className="space-y-4">
-              <p className="text-lg font-medium">{getCleanSummary(article)}</p>
+              {aiSummary ? (
+                <div className="bg-muted p-4 rounded-lg mb-6">
+                  <div className="flex items-center gap-2 mb-3">
+                    <FileText className="h-5 w-5 text-primary" />
+                    <h3 className="font-semibold text-lg">AI-Generated Summary</h3>
+                  </div>
+                  <div 
+                    className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-primary prose-p:my-2 prose-li:my-0 prose-ul:my-2" 
+                    dangerouslySetInnerHTML={{ 
+                      __html: aiSummary
+                        .replace(/\n/g, '<br>')
+                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                    }} 
+                  />
+                  <div className="mt-4 text-xs text-muted-foreground flex items-center gap-1">
+                    <span className="inline-block w-3 h-3 rounded-full bg-primary/20"></span>
+                    Generated by Claude 3.5 Sonnet
+                  </div>
+                </div>
+              ) : (
+                <p className="text-lg font-medium">{getCleanSummary(article)}</p>
+              )}
+              
+              {!aiSummary && (
+                <Button 
+                  variant="outline" 
+                  onClick={summarizeArticle} 
+                  disabled={isSummarizing}
+                  className="mb-4"
+                >
+                  {isSummarizing ? "Generating AI Summary..." : "Generate AI Summary"}
+                </Button>
+              )}
+
               <div className="prose max-w-none dark:prose-invert">
                 {processContent(article.content)
                   .split(/\n+/) // Split by newlines
@@ -214,7 +319,9 @@ export function ArticleCard({ article }: ArticleCardProps) {
                     if (trimmed.includes('http') || 
                         trimmed.includes('src=') || 
                         trimmed.includes('storage.googleapis.com') ||
-                        trimmed.match(/^<img/i)) {
+                        trimmed.includes('bsf_rt_marker') ||
+                        trimmed.match(/^</) ||
+                        trimmed.match(/^i>/)) {
                       return null;
                     }
                     

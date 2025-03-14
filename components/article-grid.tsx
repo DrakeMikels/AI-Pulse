@@ -22,7 +22,7 @@ export function ArticleGrid({
   searchQuery = "", 
   source = "all", 
   topic = "all", 
-  timeframe = "today", 
+  timeframe = "2days", 
   bookmarksOnly = false,
   filters 
 }: ArticleGridProps) {

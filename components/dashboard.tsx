@@ -18,7 +18,7 @@ export function Dashboard({ children }: DashboardProps) {
   const [filters, setFilters] = useState({
     source: "all",
     topic: "all",
-    timeframe: "today",
+    timeframe: "2days",
   })
 
   return (
