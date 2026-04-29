@@ -53,7 +53,7 @@
     "input-otp": "1.4.1",
     "ioredis": "^5.6.0",
     "lucide-react": "^0.454.0",
-    "next": "15.1.0",
+    "next": "15.1.11",
     "next-themes": "latest",
     "node-cron": "latest",
     "path": "latest",
